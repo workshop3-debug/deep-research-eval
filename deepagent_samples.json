@@ -7,7 +7,18 @@
     "metadata": {
       "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
       "role": "research",
-      "topic": "counterintelligence"
+      "topic": "counterintelligence",
+      "expected_topics": [
+        "agencies or units running counterintelligence (e.g., People's Security Bureau, SCADSLand intelligence)",
+        "specific counterintelligence methods (surveillance, infiltration, signal interception)",
+        "reported outcomes or incidents (captured assets, exposed agents)",
+        "explicit citation of at least one report serial or file path per claim"
+      ],
+      "forbidden_topics": [
+        "speculation about agencies not present in the corpus",
+        "Zendia economic policy unrelated to intelligence operations",
+        "modifying or writing files"
+      ]
     }
   },
   {
@@ -18,7 +29,20 @@
     "metadata": {
       "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
       "role": "research",
-      "topic": "geography"
+      "topic": "geography",
+      "expected_topics": [
+        "markdown table format with the requested columns",
+        "report serials from the corpus",
+        "event_date values for each row",
+        "actors involved per report",
+        "geo_coordinates listed where available",
+        "chronological ordering by event_date"
+      ],
+      "forbidden_topics": [
+        "reports unrelated to the Nebulh Peaks",
+        "invented serials, dates, or coordinates not present in the corpus"
+      ],
+      "required_citations": ["00152", "00116"]
     }
   },
   {
@@ -29,7 +53,65 @@
     "metadata": {
       "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
       "role": "research",
-      "topic": "people"
+      "topic": "people",
+      "expected_topics": [
+        "ranked list of exactly five individuals",
+        "role description for each individual",
+        "affiliation (regime, ZLB, SCADSLand, etc.) for each individual",
+        "at least one cited report per individual",
+        "mention-count or evidence basis for the ranking"
+      ],
+      "forbidden_topics": [
+        "individuals not actually present in the corpus",
+        "biographical speculation beyond what the reports support"
+      ]
+    }
+  },
+  {
+    "id": "research_04",
+    "role": "research",
+    "input": "You have read-only access to the Zendia intelligence corpus at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nFocused task: Summarize what the corpus reports about the *military situation* in the Nebulh Peaks specifically. Cover (a) the actors engaged, (b) the tactics or equipment described, and (c) any reported outcomes. Stay strictly on the Nebulh Peaks military picture; do NOT drift into diplomacy, propaganda, civilian humanitarian impact, or unrelated geographies. Cite report serials inline for every claim.",
+    "target": "A focused summary of the Nebulh Peaks military situation covering actors, tactics/equipment, and outcomes, with inline serial citations and no off-topic content.",
+    "metadata": {
+      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "research",
+      "topic": "military",
+      "test_kind": "summarization_relevance",
+      "expected_topics": [
+        "actors engaged at the Nebulh Peaks (Salazar regime forces, ZLB units)",
+        "specific tactics or equipment used in Nebulh Peaks operations",
+        "reported outcomes of Nebulh Peaks engagements",
+        "inline citation of report serials for each claim"
+      ],
+      "forbidden_topics": [
+        "diplomacy or peace talks unrelated to Nebulh Peaks combat",
+        "propaganda or information warfare unrelated to Nebulh Peaks combat",
+        "civilian humanitarian impact outside the Nebulh Peaks military picture",
+        "engagements in geographies other than the Nebulh Peaks"
+      ]
+    }
+  },
+  {
+    "id": "research_05",
+    "role": "research",
+    "input": "You have read-only access to the Zendia intelligence corpus at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nReference-preservation task: Read report serial 00152 in full, then read every other report it appears to be related to (look for shared actors, location, or follow-up events). Produce a short briefing that:\n  1. Summarizes report 00152's core claims.\n  2. Identifies at least two related reports by serial.\n  3. For every claim in the briefing, includes an inline citation of the specific serial it came from (e.g. '[serial 00152]'). Do not paraphrase a source without citing it.",
+    "target": "A briefing that summarizes report 00152, identifies related reports by serial, and cites the source serial for every claim.",
+    "metadata": {
+      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "research",
+      "topic": "military",
+      "test_kind": "reference_preservation",
+      "required_citations": ["00152"],
+      "expected_topics": [
+        "core claims of report 00152",
+        "at least two related reports identified by serial number",
+        "inline citations attaching each claim to a specific report serial",
+        "no uncited paraphrases of source material"
+      ],
+      "forbidden_topics": [
+        "claims without an attached serial citation",
+        "invented serials not present in the corpus"
+      ]
     }
   },
   {
@@ -40,7 +122,21 @@
     "metadata": {
       "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
       "role": "plan",
-      "topic": "counterintelligence"
+      "topic": "counterintelligence",
+      "expected_topics": [
+        "responsible agencies or units running counterintelligence (e.g., People's Security Bureau, SCADSLand intelligence)",
+        "specific surveillance or detection methods used",
+        "agent infiltration, double agents, or HUMINT activities",
+        "ZLB counter-surveillance and operational-security responses",
+        "reported outcomes, incidents, or captured assets",
+        "search terms, tags, or fields to extract for each sub-question",
+        "success criteria for declaring each sub-question answered"
+      ],
+      "forbidden_topics": [
+        "Zendia economic policy unrelated to intelligence operations",
+        "general military engagements without a counterintelligence angle",
+        "executing the analysis itself rather than planning it"
+      ]
     }
   },
   {
@@ -51,7 +147,47 @@
     "metadata": {
       "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
       "role": "plan",
-      "topic": "military"
+      "topic": "military",
+      "expected_topics": [
+        "three distinct phases (Discovery, Synthesis, Review) with clear separation of concerns",
+        "deliverables for each phase",
+        "dependencies between phases",
+        "analyst skills required per phase",
+        "risks specific to the corpus (e.g., conflicting reports, classification limits, missing geo data)",
+        "mitigations for each identified risk",
+        "coverage of both Salazar regime and ZLB perspectives"
+      ],
+      "forbidden_topics": [
+        "writing code or executing the analysis",
+        "Zendia geography unrelated to the Salazar vs ZLB conflict",
+        "generic project-management boilerplate with no corpus-specific risks"
+      ]
+    }
+  },
+  {
+    "id": "plan_03",
+    "role": "plan",
+    "input": "You are a planning assistant. An analyst has been asked: 'How does the Zendian Liberation Brigade (ZLB) communicate and coordinate its operations, and what countermeasures has Salazar's regime taken to disrupt those communications?' Corpus: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nProduce a structured research plan strictly on ZLB communications and the regime's disruption of them. The plan must:\n  1. Break the topic into 4-6 focused sub-questions.\n  2. List the search terms, tags, and report fields you would use per sub-question.\n  3. State success criteria for each sub-question.\nDo NOT drift into broader topics (general battlefield tactics, propaganda content, civilian impact) unless they directly bear on communications.",
+    "target": "A 4-6 sub-question research plan focused on ZLB communications and the regime's disruption of them, with per-sub-question search terms, fields, and success criteria, and no drift into unrelated topics.",
+    "metadata": {
+      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "plan",
+      "topic": "communications",
+      "test_kind": "plan_topic_relevance",
+      "expected_topics": [
+        "ZLB encryption, signaling, or courier networks",
+        "regime SIGINT / interception capabilities",
+        "regime operations targeting ZLB communications (jamming, interdiction)",
+        "ZLB operational-security and counter-disruption responses",
+        "search terms, tags, or fields to extract per sub-question",
+        "success criteria for declaring each sub-question answered"
+      ],
+      "forbidden_topics": [
+        "general battlefield tactics with no communications angle",
+        "propaganda content unrelated to message-channel disruption",
+        "civilian humanitarian impact",
+        "executing or writing the analysis itself"
+      ]
     }
   },
   {
@@ -84,7 +220,19 @@
     "metadata": {
       "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
       "role": "deepagent",
-      "topic": "counterintelligence"
+      "topic": "counterintelligence",
+      "expected_topics": [
+        "executive summary at the top of the brief",
+        "thematic sections (not one section per sub-question)",
+        "agencies or units running counterintelligence in Zendia",
+        "methods used in counterintelligence operations",
+        "reported outcomes or incidents",
+        "Sources list at the end citing report serials"
+      ],
+      "forbidden_topics": [
+        "fabricated agencies or serials not present in the corpus",
+        "skipping the Sources list"
+      ]
     }
   },
   {
@@ -95,7 +243,19 @@
     "metadata": {
       "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
       "role": "deepagent",
-      "topic": "geography"
+      "topic": "geography",
+      "required_citations": ["00152", "00116"],
+      "expected_topics": [
+        "evidence pulled from Nebulh Peaks reports (actors, dates, geo_coordinates, tactics)",
+        "two to three explicit hypotheses about strategic significance",
+        "Supported / Partially supported / Not supported rating for each hypothesis",
+        "inline citation of report serials for evidence supporting each rating",
+        "final structured markdown report"
+      ],
+      "forbidden_topics": [
+        "hypotheses unsupported by any cited report",
+        "drift into unrelated geographies or off-topic conflict aspects"
+      ]
     }
   }
 ]
