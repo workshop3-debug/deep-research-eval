@@ -2,7 +2,7 @@
 
 The agent takes a research question and produces a structured report by:
   1. Planning: decompose the question into focused sub-questions.
-  2. Researching: for each sub-question, run a web search and summarize hits.
+  2. Researching: for each sub-question, run a document search and summarize hits.
   3. Reflecting: identify gaps and generate follow-up queries (bounded loops).
   4. Writing: synthesize a final Markdown report with citations.
 
@@ -109,7 +109,7 @@ def _load_corpus() -> list[dict[str, Any]]:
     return docs
 
 
-def web_search(query: str, max_results: int = 5) -> list[dict[str, str]]:
+def search(query: str, max_results: int = 5) -> list[dict[str, str]]:
     """Search local JSON corpus and return [{title, url, snippet}]."""
     corpus = _load_corpus()
     q_tokens = [t for t in _tokenize(query) if t not in _STOPWORDS]
@@ -144,7 +144,7 @@ def web_search(query: str, max_results: int = 5) -> list[dict[str, str]]:
 
 class SubQuestion(BaseModel):
     question: str = Field(description="A focused sub-question to research.")
-    search_query: str = Field(description="A concise web search query for it.")
+    search_query: str = Field(description="A concise document search query for it.")
 
 
 class Plan(BaseModel):
@@ -185,10 +185,10 @@ class ResearchState(TypedDict, total=False):
 
 PLANNER_SYS = """You are a research planner. Given a topic, break it into 3-6 \
 sub-questions that, taken together, fully cover the topic. Each sub-question \
-should be answerable with a focused web search. Avoid overlap."""
+should be answerable with a focused document search. Avoid overlap."""
 
 RESEARCH_SYS = """You are a research analyst. You will be given a sub-question \
-and a list of web search results (title, url, snippet). Write a concise, \
+and a list of document search results (title, url, snippet). Write a concise, \
 factual summary (4-8 sentences) that answers the sub-question using only the \
 provided results. Cite sources inline as [n] referring to the result index \
 (1-based). If the results are insufficient, say so explicitly."""
@@ -230,7 +230,7 @@ def research_node(state: ResearchState) -> dict[str, Any]:
     llm = build_llm()
     new_findings: list[Finding] = []
     for sq in state["pending"]:
-        results = web_search(sq.search_query, max_results=5)
+        results = search(sq.search_query, max_results=5)
         if not results:
             new_findings.append(
                 {
@@ -353,12 +353,13 @@ def build_graph():
     g.add_node("write", write_node)
 
     g.add_edge(START, "plan")
-    g.add_edge("plan", "research")
-    g.add_edge("research", "reflect")
-    g.add_conditional_edges(
-        "reflect", should_continue, {"research": "research", "write": "write"}
-    )
-    g.add_edge("write", END)
+    g.add_edge("plan", END)
+    # g.add_edge("plan", "research")
+    # g.add_edge("research", "reflect")
+    # g.add_conditional_edges(
+    #     "reflect", should_continue, {"research": "research", "write": "write"}
+    # )
+    # g.add_edge("write", END)
     return g.compile()
 
 
@@ -367,15 +368,28 @@ def build_graph():
 # --------------------------------------------------------------------------- #
 
 
-def run(topic: str, max_iterations: int = 2, verbose: bool = False) -> str:
+def run(
+    topic: str, max_iterations: int = 2, verbose: bool = False
+) -> dict[str, Any]:
+    """Run the graph and return a dict with the full final state plus
+    per-stage snapshots captured during streaming.
+
+    Returned keys:
+      - "report": final Markdown report
+      - "plan":   initial list[SubQuestion]
+      - "findings": list of {question, summary, sources}
+      - "iterations": reflect-loop count
+      - "stages": {node_name: [update_dict, ...]} captured in order
+    """
     graph = build_graph()
-    final: dict[str, Any] = {}
+    stages: dict[str, list[dict[str, Any]]] = {}
     for event in graph.stream(
         {"topic": topic, "max_iterations": max_iterations},
         stream_mode="updates",
     ):
-        if verbose:
-            for node, update in event.items():
+        for node, update in event.items():
+            stages.setdefault(node, []).append(update)
+            if verbose:
                 preview = {
                     k: (
                         f"<{len(v)} items>"
@@ -395,12 +409,146 @@ def run(topic: str, max_iterations: int = 2, verbose: bool = False) -> str:
                     for i, sq in enumerate(update["pending"], start=1):
                         print(f"    {i}. {sq.question}")
                         print(f"       query: {sq.search_query}")
-        final.update(next(iter(event.values())))
-    # The streamed `final` only holds the last update; re-run via invoke to
-    # get the complete terminal state.
+    # Re-invoke to get the complete terminal state in one shot.
     state = graph.invoke({"topic": topic, "max_iterations": max_iterations})
-    return state["report"]
+    state["stages"] = stages
+    return state
 
+
+def print_stages(state: dict[str, Any]) -> None:
+    """Pretty-print each pipeline stage from a run() result."""
+    bar = "=" * 72
+
+    print(f"\n{bar}\nPLAN  (initial sub-questions)\n{bar}")
+    plan = state.get("plan") or []
+    if not plan:
+        print("(no plan captured)")
+    for i, sq in enumerate(plan, start=1):
+        print(f"  {i}. {sq.question}")
+        print(f"     search query: {sq.search_query}")
+
+    print(f"\n{bar}\nRESEARCH  (findings per sub-question)\n{bar}")
+    findings = state.get("findings") or []
+    for i, f in enumerate(findings, start=1):
+        print(f"\n  [{i}] Q: {f['question']}")
+        print(f"      Summary:")
+        for line in f["summary"].splitlines():
+            print(f"        {line}")
+        print(f"      Sources ({len(f['sources'])}):")
+        for j, src in enumerate(f["sources"], start=1):
+            title = src.get("title") or "(untitled)"
+            print(f"        {j}. {title}")
+            print(f"           {src.get('url', '')}")
+
+    reflect_updates = state.get("stages", {}).get("reflect", [])
+    if reflect_updates:
+        print(f"\n{bar}\nREFLECT  (loop iterations)\n{bar}")
+        for i, upd in enumerate(reflect_updates, start=1):
+            follow = upd.get("pending") or []
+            print(f"\n  iteration {i}: {len(follow)} follow-up(s)")
+            for j, sq in enumerate(follow, start=1):
+                print(f"    {j}. {sq.question}")
+                print(f"       search query: {sq.search_query}")
+        print(f"\n  total reflect iterations: {state.get('iterations', 0)}")
+
+    print(f"\n{bar}\nREPORT\n{bar}\n")
+    print(state.get("report", "(no report)"))
+
+
+def evaluate_plan(state: dict[str, Any]):
+    plan = state.get('plan')
+    
+    sub_questions = []
+    for i, sq in enumerate(plan, start=1):
+        sub_questions.append(sq.question)
+
+    topic = state.get('topic')
+
+    print(f"Plan: {plan}")
+    print(f"Sub Questions: {sub_questions}")
+
+    llm = build_llm()
+    evaluation = llm.invoke(
+        [
+            SystemMessage(content=f"""You are an expert evaluator of research plans. Your job is to assess how well a set of sub-questions decomposes an original research question into a focused, actionable research plan.
+
+            ## Evaluation Criteria
+
+            Score each criterion on a 1-5 scale, where:
+            - 1 = Poor (major issues, plan is unusable) 
+            - 2 = Below average (significant gaps or flaws)
+            - 3 = Acceptable (usable but with notable weaknesses)
+            - 4 = Good (minor issues only)
+            - 5 = Excellent (no meaningful issues)
+
+            ### 1. Relevance
+            Do the sub-questions directly serve the original question? Penalize sub-questions that drift off-topic, address tangential issues, or pursue information the user did not ask for.
+
+            ### 2. Coverage
+            Do the sub-questions collectively address all important aspects of the original question? Identify any major topics, angles, or dimensions that are missing.
+
+            ### 3. Non-Redundancy
+            Are the sub-questions sufficiently distinct? Penalize semantic duplicates, heub-questions that would retrieve the same information.
+
+            ### 4. Atomicity
+            Is each sub-question focused enough to be answered by a single round of research? Penalize compound questions that bundle multiple distinct inquiries, and overly vague questions that cannot be meaningfully researched.
+
+            ### 5. Answerability
+            Can each sub-question plausibly be answered via web search and publicly available sources? Penalize sub-questions that are too speculative, opinion-based without clear evidence paths, or require private/inaccessible information.
+
+            ### 6. Appropriate Scope
+            Is the plan's breadth and depth well-calibrated to the original question? Penalize plans that are too shallow (missing obvious depth), too s-decomposed), or mis-scaled to user intent.
+
+            ## Output Format
+
+            Respond with valid JSON only, no additional text:
+
+            {{
+            "scores": {{
+                "relevance": <1-5>,
+                "coverage": <1-5>,
+                "non_redundancy": <1-5>,
+                "atomicity": <1-5>,
+                "answerability": <1-5>,
+                "appropriate_scope": <1-5>
+            }},
+            "overall_score": <1-5 float, weighted judgment across all criteria>,
+            "strengths": [
+                "<concise strength 1>",
+                "<concise strength 2>"
+            ],
+            "weaknesses": [
+                "<concise weakness 1>",
+                "<concise weakness 2>"
+            ],
+            "missing_topics": [
+                "<topic or angle the plan failed to cover, if any>"
+            ],
+            "redundant_pairs": [
+                {{"sub_question_a": "<text>", "sub_question_b": "<text_redundant>"}}
+            ],
+            "problematic_sub_questions": [
+                {{"sub_question": "<text>", "issue": "<specific problem>"}}
+            ],
+            "rationale": "<2-4 sentence summary of your overall assessment>"
+            }}
+
+            ## Guidelines
+            - Be strict but fair. Reserve 5s for genuinely excellent work.
+            - Ground every critique in specific sub-questions when possible.
+            - If a list has no items (e.g., no redundant pairs), return an empty array [].
+            - Judge the plan on its own merits, not on how you would have written it differently.
+            """),
+
+            HumanMessage(content=f"""## Original User Question
+                                    {topic}
+
+                                    ## Generated Research Plan (Sub-questions)
+                                    {', '.join(sub_questions)}"""),
+        ]
+    )
+
+    print(f"Evaluation: {evaluation}")
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Deep research agent.")
@@ -408,21 +556,36 @@ def main() -> None:
     p.add_argument(
         "--max-iterations",
         type=int,
-        default=2,
-        help="Maximum reflect/research loops (default: 2).",
+        default=1,
+        help="Maximum reflect/research loops (default: 1).",
     )
     p.add_argument("-v", "--verbose", action="store_true")
     p.add_argument("-o", "--output", help="Write the report to this file.")
+    p.add_argument(
+        "--show-stages",
+        action="store_true",
+        help="Print plan, research findings, and reflect output in addition to the report.",
+    )
     args = p.parse_args()
 
-    report = run(args.topic, args.max_iterations, args.verbose)
-    if args.output:
-        with open(args.output, "w") as f:
-            f.write(report)
-        print(f"Wrote report to {args.output}")
-    else:
-        print(report)
+    state = run(args.topic, args.max_iterations, args.verbose)
+    # report = state["report"]
 
+    # if args.show_stages:
+    #     print_stages(state)
+    # elif args.output:
+    #     with open(args.output, "w") as f:
+    #         f.write(report)
+    #     print(f"Wrote report to {args.output}")
+    # else:
+    #     print(report)
+
+    # if args.show_stages and args.output:
+    #     with open(args.output, "w") as f:
+    #         f.write(report)
+    #     print(f"\nWrote report to {args.output}")
+
+    evaluate_plan(state)
 
 if __name__ == "__main__":
     main()

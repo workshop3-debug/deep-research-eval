@@ -1,30 +1,35 @@
 """
 DeepAgent Evaluation with Inspect AI
 ======================================
-Evaluates the full DeepAgent pipeline as well as each subagent individually:
+Evaluates the full DeepAgent pipeline as well as each subagent individually
+against the Zendia intelligence corpus:
   - research()   - read-only data gathering from the SCADS2025 dataset path
   - plan()       - structured planning / analysis
   - general()    - full-capability execution
 
 Samples are loaded from: deepagent_samples.json (same directory as this file)
-Each sample must have: id, role, input, target, and a top-level 'role' key.
+Each sample must have: id, role, input, target, metadata.
 
 Run examples
 ------------
 # Full suite (all four tasks):
-    inspect eval deepagent_eval.py --model anthropic/claude-sonnet-4-20250514
+    inspect eval deep_agent_inspect.py --model openai/gpt-5-mini
 
 # A single task:
-    inspect eval deepagent_eval.py@task_research_agent --model anthropic/claude-sonnet-4-20250514
-    inspect eval deepagent_eval.py@task_plan_agent     --model anthropic/claude-sonnet-4-20250514
-    inspect eval deepagent_eval.py@task_general_agent  --model anthropic/claude-sonnet-4-20250514
-    inspect eval deepagent_eval.py@task_deepagent_full --model anthropic/claude-sonnet-4-20250514
+    inspect eval deep_agent_inspect.py@task_research_agent --model openai/gpt-5-mini
+    inspect eval deep_agent_inspect.py@task_plan_agent     --model openai/gpt-5-mini
+    inspect eval deep_agent_inspect.py@task_general_agent  --model openai/gpt-5-mini
+    inspect eval deep_agent_inspect.py@task_deepagent_full --model openai/gpt-5-mini
 
 # View results afterwards:
     inspect view
 """
 
+from __future__ import annotations
+
 import json
+import os
+import re
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
@@ -32,16 +37,30 @@ from typing import Any
 from inspect_ai import Task, task
 from inspect_ai.agent import as_solver, deepagent, general, plan, research
 from inspect_ai.dataset import Sample
+from inspect_ai.model import (
+    ChatMessageSystem,
+    ChatMessageUser,
+    GenerateConfig,
+    get_model,
+)
 from inspect_ai.scorer import (
     Score,
+    Scorer,
     Target,
-    accuracy,
-    model_graded_fact,
-    model_graded_qa,
+    mean,
     scorer,
+    stderr,
 )
 from inspect_ai.solver import TaskState
 from inspect_ai.tool import bash, grep, list_files, read_file, text_editor
+
+# ---------------------------------------------------------------------------
+# LLM proxy wiring — LAS proxy speaks the OpenAI protocol.
+# ---------------------------------------------------------------------------
+
+if os.getenv("OPENAI_KEY") and not os.getenv("OPENAI_API_KEY"):
+    os.environ["OPENAI_API_KEY"] = os.environ["OPENAI_KEY"]
+os.environ.setdefault("OPENAI_BASE_URL", "https://llm-west.ncsu-las.net/v1")
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -49,21 +68,20 @@ from inspect_ai.tool import bash, grep, list_files, read_file, text_editor
 
 SAMPLES_FILE = Path(__file__).parent / "deepagent_samples.json"
 
-DATASET_PATH = (
-    "/home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets"
+DATASET_PATH = os.getenv(
+    "DEEP_RESEARCH_DATASET",
+    "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
 )
 
-JUDGE_MODEL = "openai/openai/gpt-4o-mini"
+JUDGE_MODEL = os.getenv("DEEP_RESEARCH_JUDGE_MODEL", "openai/gpt-5-mini")
+
 
 # ---------------------------------------------------------------------------
 # Load samples from JSON
 # ---------------------------------------------------------------------------
 
 def load_samples(role: str) -> list[Sample]:
-    """
-    Read deepagent_samples.json and return samples matching `role`.
-    Each JSON object must have: id, input, target, and a top-level 'role' key.
-    """
+    """Read deepagent_samples.json and return samples matching `role`."""
     with open(SAMPLES_FILE, "r", encoding="utf-8") as f:
         raw: list[dict[str, Any]] = json.load(f)
 
@@ -80,40 +98,179 @@ def load_samples(role: str) -> list[Sample]:
 
 
 # ---------------------------------------------------------------------------
-# Custom scorer: task-completion rubric via LLM judge
+# LLM-judge helpers (shared rubric infrastructure)
 # ---------------------------------------------------------------------------
 
-@scorer(metrics=[accuracy()])
-def task_completion_scorer(model: str = JUDGE_MODEL):
-    """
-    LLM-as-judge that rates the agent response on a 0 / 0.5 / 1.0 scale.
-      C (correct / complete)  -> 1.0
-      P (partial)             -> 0.5
-      I (incorrect / missing) -> 0.0
-    """
+_JSON_BLOCK = re.compile(r"\{.*\}|\[.*\]", re.DOTALL)
+
+
+def _parse_json(text: str) -> Any:
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    m = _JSON_BLOCK.search(text)
+    if m:
+        try:
+            return json.loads(m.group(0))
+        except json.JSONDecodeError:
+            return None
+    return None
+
+
+JUDGE_TEMPLATE = """You are a strict evaluator. Score the assistant response on \
+a 1-5 scale and respond with valid JSON only:
+{{"score": <1-5 integer>, "rationale": "<1-3 sentences>"}}
+
+Criteria:
+{criteria}
+
+Original task:
+{task}
+
+Reference target (what a good response should cover):
+{target}
+
+Assistant response:
+{response}
+"""
+
+
+async def _judge(criteria: str, task_text: str, target_text: str, response: str) -> tuple[float, str]:
+    out = await get_model(JUDGE_MODEL).generate(
+        [
+            ChatMessageSystem(
+                content="You are a strict evaluator. Respond with valid JSON only."
+            ),
+            ChatMessageUser(
+                content=JUDGE_TEMPLATE.format(
+                    criteria=criteria,
+                    task=task_text,
+                    target=target_text,
+                    response=response or "(empty response)",
+                )
+            ),
+        ],
+        config=GenerateConfig(temperature=0.0),
+    )
+    data = _parse_json(out.completion) or {}
+    try:
+        raw = float(data.get("score", 0))
+    except (TypeError, ValueError):
+        raw = 0.0
+    score = max(0.0, min(5.0, raw)) / 5.0  # normalize to [0, 1]
+    return score, str(data.get("rationale", "judge returned no rationale"))
+
+
+# Per-role rubrics — analogous to the phase scorers in deep_research_inspect.py.
+RESEARCH_CRITERIA = """- Faithfulness: every claim is supported by evidence drawn from the corpus.
+- Relevance: the answer addresses what was actually asked.
+- Coverage: uses multiple relevant reports rather than a single hit.
+- Citations: cites specific report files / serials so claims are traceable.
+- Honest gaps: explicitly says when the corpus is silent on something.
+- Discipline: stays read-only and does not fabricate file contents."""
+
+PLAN_CRITERIA = """- Structure: clearly organized phases or numbered steps.
+- Specificity: steps are actionable, not vague aspirations.
+- Coverage: addresses every dimension the prompt asks for (deliverables, dependencies, risks, etc.).
+- Atomicity: sub-questions or steps are focused enough to execute independently.
+- Success criteria: defines how each step is judged 'done'.
+- No execution: produces a plan only, without running code or writing files."""
+
+GENERAL_CRITERIA = """- Correctness: computed values and extracted facts match what the corpus actually contains.
+- Completeness: every sub-task in the prompt is attempted.
+- Faithfulness: claims are grounded in observed files, not invented.
+- Format compliance: output matches the requested format (markdown table, word limits, ordering).
+- Citations: when asked, references specific report serials / paths.
+- Synthesis: where the prompt asks for interpretation, the synthesis is supported by the extracted data."""
+
+DEEPAGENT_CRITERIA = """- Pipeline: the response shows evidence of research -> plan -> execution stages.
+- Faithfulness: claims trace back to specific reports in the corpus.
+- Structure: final output is a coherent markdown brief with executive summary, thematic sections, and sources.
+- Coverage: integrates findings across multiple sub-questions / reports.
+- Citations: report serials or paths are cited inline or in a sources list.
+- Analysis quality: where hypotheses are required, each is rated against evidence."""
+
+
+def _rubric_scorer(criteria: str, label: str) -> Scorer:
     async def score(state: TaskState, target: Target) -> Score:
-        judge = model_graded_qa(
-            model=model,
-            instructions=dedent("""\
-                You are an expert evaluator.
+        response = state.output.completion or ""
+        task_text = state.input_text
+        target_text = target.text if hasattr(target, "text") else str(target)
+        s, rationale = await _judge(criteria, task_text, target_text, response)
+        return Score(value=s, explanation=rationale, metadata={"rubric": label})
 
-                Rate the ASSISTANT RESPONSE against the CRITERION below.
+    return score
 
-                Scoring rubric:
-                  C (correct / complete)   - fully satisfies the criterion
-                  P (partial)              - partially satisfies, some gaps
-                  I (incorrect/missing)    - does not satisfy the criterion
 
-                Respond with exactly one letter: C, P, or I
-            """),
+@scorer(metrics=[mean(), stderr()])
+def score_research_rubric() -> Scorer:
+    return _rubric_scorer(RESEARCH_CRITERIA, "research")
+
+
+@scorer(metrics=[mean(), stderr()])
+def score_plan_rubric() -> Scorer:
+    return _rubric_scorer(PLAN_CRITERIA, "plan")
+
+
+@scorer(metrics=[mean(), stderr()])
+def score_general_rubric() -> Scorer:
+    return _rubric_scorer(GENERAL_CRITERIA, "general")
+
+
+@scorer(metrics=[mean(), stderr()])
+def score_deepagent_rubric() -> Scorer:
+    return _rubric_scorer(DEEPAGENT_CRITERIA, "deepagent")
+
+
+# Lightweight C/P/I task-completion scorer kept for backwards compatibility.
+CPI_INSTRUCTIONS = """Decide whether the assistant response satisfies the task \
+and its target description.
+Reply with exactly one letter:
+  C - fully satisfies the target
+  P - partially satisfies, with material gaps
+  I - does not satisfy the target"""
+
+
+@scorer(metrics=[mean(), stderr()])
+def task_completion_scorer() -> Scorer:
+    async def score(state: TaskState, target: Target) -> Score:
+        response = state.output.completion or ""
+        task_text = state.input_text
+        target_text = target.text if hasattr(target, "text") else str(target)
+        out = await get_model(JUDGE_MODEL).generate(
+            [
+                ChatMessageSystem(content="You are a strict evaluator."),
+                ChatMessageUser(
+                    content=dedent(
+                        f"""\
+                        {CPI_INSTRUCTIONS}
+
+                        Task:
+                        {task_text}
+
+                        Target:
+                        {target_text}
+
+                        Response:
+                        {response or '(empty response)'}
+
+                        Reply with exactly one letter: C, P, or I.
+                        """
+                    )
+                ),
+            ],
+            config=GenerateConfig(temperature=0.0),
         )
-        result = await judge(state, target)
-        grade_map = {"C": 1.0, "P": 0.5, "I": 0.0}
-        value = grade_map.get(str(result.value).strip().upper(), 0.0)
+        letter = (out.completion or "").strip().upper()[:1]
+        value = {"C": 1.0, "P": 0.5, "I": 0.0}.get(letter, 0.0)
         return Score(
             value=value,
-            explanation=result.explanation,
-            metadata={"raw_grade": result.value},
+            explanation=out.completion.strip(),
+            metadata={"raw_grade": letter},
         )
 
     return score
@@ -123,7 +280,7 @@ def task_completion_scorer(model: str = JUDGE_MODEL):
 # Tool sets
 # ---------------------------------------------------------------------------
 
-READONLY_TOOLS  = [read_file(), list_files(), grep()]
+READONLY_TOOLS = [read_file(), list_files(), grep()]
 READWRITE_TOOLS = [read_file(), list_files(), grep(), bash(), text_editor()]
 
 
@@ -133,19 +290,23 @@ READWRITE_TOOLS = [read_file(), list_files(), grep(), bash(), text_editor()]
 
 @task
 def task_research_agent() -> Task:
-    """Evaluate the research() subagent in isolation."""
+    """Evaluate the research() subagent on Zendia corpus extraction tasks."""
     research_subagent = research(
         tools=READONLY_TOOLS,
         instructions=dedent(f"""\
-            You have read-only access to the dataset directory:
+            You have read-only access to the Zendia intelligence corpus at:
             {DATASET_PATH}
 
+            The corpus is a directory tree of JSON reports. Each report has
+            fields like: serial, title, event_date, author, tags, topic,
+            classification, body, geo_coordinates.
+
             Use list_files, read_file, and grep to gather information.
+            Cite specific report files (path or serial) when making claims.
             Never attempt to write or modify files.
         """),
     )
 
-    # Correct pattern: instantiate deepagent(...) first, then wrap with as_solver()
     agent = deepagent(
         subagents=[research_subagent],
         memory=False,
@@ -157,10 +318,7 @@ def task_research_agent() -> Task:
     return Task(
         dataset=load_samples("research"),
         solver=as_solver(agent),
-        scorer=[
-            task_completion_scorer(),
-            model_graded_fact(model=JUDGE_MODEL),
-        ],
+        scorer=[task_completion_scorer(), score_research_rubric()],
         metadata={"subagent": "research"},
         sandbox="local",
     )
@@ -172,15 +330,18 @@ def task_research_agent() -> Task:
 
 @task
 def task_plan_agent() -> Task:
-    """Evaluate the plan() subagent in isolation."""
+    """Evaluate the plan() subagent on Zendia research-planning tasks."""
     plan_subagent = plan(
         tools=READONLY_TOOLS,
         instructions=dedent(f"""\
-            You are a planning specialist. The dataset you may inspect
-            (read-only) lives at: {DATASET_PATH}
+            You are a planning specialist for Zendia intelligence analysis.
+            The corpus you may inspect (read-only) lives at:
+            {DATASET_PATH}
 
-            Produce structured, actionable plans. Do not execute code or
-            modify any files.
+            Produce structured, actionable research plans. Break the task into
+            focused sub-questions, list the search terms and report fields you
+            would use, and state clear success criteria for each step. Do not
+            execute code, modify files, or produce the final analysis itself.
         """),
     )
 
@@ -195,10 +356,7 @@ def task_plan_agent() -> Task:
     return Task(
         dataset=load_samples("plan"),
         solver=as_solver(agent),
-        scorer=[
-            task_completion_scorer(),
-            model_graded_fact(model=JUDGE_MODEL),
-        ],
+        scorer=[task_completion_scorer(), score_plan_rubric()],
         metadata={"subagent": "plan"},
         sandbox="local",
     )
@@ -210,15 +368,18 @@ def task_plan_agent() -> Task:
 
 @task
 def task_general_agent() -> Task:
-    """Evaluate the general() subagent in isolation."""
+    """Evaluate the general() subagent on Zendia corpus-wide computations."""
     general_subagent = general(
         tools=READWRITE_TOOLS,
         instructions=dedent(f"""\
-            You are a capable general-purpose assistant.
-            Dataset directory: {DATASET_PATH}
+            You are a capable general-purpose analyst.
+            Zendia corpus directory: {DATASET_PATH}
 
+            The corpus is a directory tree of JSON reports with fields like
+            serial, title, event_date, tags, topic, classification, body.
             You may read AND process files (bash, text_editor). Use Python
-            via bash for data analysis when appropriate.
+            via bash for aggregation and statistics. Cite specific report
+            serials when summarizing findings.
         """),
         memory="readwrite",
     )
@@ -234,12 +395,9 @@ def task_general_agent() -> Task:
     return Task(
         dataset=load_samples("general"),
         solver=as_solver(agent),
-        scorer=[
-            task_completion_scorer(),
-            model_graded_fact(model=JUDGE_MODEL),
-        ],
+        scorer=[task_completion_scorer(), score_general_rubric()],
         metadata={"subagent": "general"},
-        sandbox="local",        
+        sandbox="local",
     )
 
 
@@ -249,39 +407,39 @@ def task_general_agent() -> Task:
 
 @task
 def task_deepagent_full() -> Task:
-    """
-    Evaluate the complete DeepAgent with all three subagents:
-    research -> plan -> general.
-    """
+    """Evaluate the complete DeepAgent: research -> plan -> general."""
     research_subagent = research(
         tools=READONLY_TOOLS,
         instructions=dedent(f"""\
-            Your role: read-only data exploration.
-            Dataset path: {DATASET_PATH}
+            Your role: read-only exploration of the Zendia intelligence corpus.
+            Corpus path: {DATASET_PATH}
 
-            Use list_files, read_file, and grep.
-            Summarise findings clearly for the planning stage.
+            Use list_files, read_file, and grep. Summarise findings clearly
+            for the planning stage, citing specific report serials.
         """),
     )
 
     plan_subagent = plan(
         tools=READONLY_TOOLS,
         instructions=dedent(f"""\
-            Your role: structured, actionable planning based on research findings.
-            Dataset path (reference only): {DATASET_PATH}
+            Your role: structured planning based on the research stage's findings.
+            Corpus path (reference only): {DATASET_PATH}
 
-            Output numbered steps with clear success criteria.
+            Output numbered steps with sub-questions to answer, fields to extract,
+            and success criteria for each.
         """),
     )
 
     general_subagent = general(
         tools=READWRITE_TOOLS,
         instructions=dedent(f"""\
-            Your role: execute the plan from the plan subagent.
-            Dataset path: {DATASET_PATH}
+            Your role: execute the plan from the plan subagent and produce the
+            final report.
+            Corpus path: {DATASET_PATH}
 
-            Use bash for computations. Return results as a structured
-            markdown report.
+            Use bash for aggregations. Produce a markdown intelligence brief
+            with an executive summary, thematic sections, and a Sources list
+            citing report serials.
         """),
         memory="readwrite",
     )
@@ -292,36 +450,26 @@ def task_deepagent_full() -> Task:
         todo_write=True,
         max_depth=2,
         instructions=dedent(f"""\
-            You orchestrate three specialised subagents:
+            You orchestrate three specialised subagents over the Zendia corpus:
               - research  : read-only data exploration
               - plan      : structured planning
-              - general   : code execution and file operations
+              - general   : code execution and report writing
 
-            Dataset path: {DATASET_PATH}
+            Corpus path: {DATASET_PATH}
 
             Always follow the sequence: research -> plan -> general.
-            Consolidate outputs into a final markdown report.
+            Consolidate outputs into a final markdown intelligence brief with
+            executive summary, thematic sections, and a Sources list of report
+            serials.
         """),
     )
 
     return Task(
         dataset=load_samples("deepagent"),
         solver=as_solver(agent),
-        scorer=[
-            task_completion_scorer(),
-            model_graded_qa(
-                model=JUDGE_MODEL,
-                instructions=dedent("""\
-                    Does the final report:
-                      (a) cover data exploration findings?
-                      (b) include a clear analysis plan?
-                      (c) contain computed statistics or test results?
-                    Answer C (all three present), P (one or two), or I (none).
-                """),
-            ),
-        ],
+        scorer=[task_completion_scorer(), score_deepagent_rubric()],
         metadata={"subagent": "deepagent_full"},
-        sandbox="local",        
+        sandbox="local",
     )
 
 
@@ -329,8 +477,5 @@ def task_deepagent_full() -> Task:
 # To run ALL tasks in one sweep, just point inspect at this file with no
 # task name - it will auto-discover all @task functions:
 #
-#   inspect eval deepagent_eval.py --model anthropic/claude-sonnet-4-20250514
-#
-# Note: returning list[Task] from a @task function is not supported by the
-# inspect registry, so we don't define a combined task here.
+#   inspect eval deep_agent_inspect.py --model openai/gpt-5-mini
 # ---------------------------------------------------------------------------
