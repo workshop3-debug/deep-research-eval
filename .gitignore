@@ -1,0 +1,102 @@
+# Security - Never commit these
+../.ssh/
+../.gnupg/
+../secret
+../.netrc
+**/*.pem
+**/*.key
+**/*.cert
+**/*.p12
+.env
+.env.*
+**/credentials
+**/secrets
+
+# Bash/Shell history and config
+../.bash_history
+../.bash_logout
+../.bashrc
+../.profile
+../.viminfo
+../.wget-hsts
+../.sudo_as_admin_successful
+../.ICEauthority
+../.Xauthority
+
+# Cache and local config
+../.cache/
+../.config/
+../.local/
+../.dbus/
+../.pki/
+../.redhat/
+
+# IDE and editors
+../.vscode/
+.vscode/
+.idea/
+*.~
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+../.venv/
+.venv/
+venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+../.jupyter/
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# Node/NPM
+../.npm/
+node_modules/
+npm-debug.log*
+
+# NVM
+../.nvm/
+
+# Conda/Python ML
+../nltk_data/
+../.keras/
+../.dotnet/
+
+# Dot files at parent level
+../.gitconfig
+../.claude.json
+../.claude/
+../CLAUDE.md
+
+# VNC
+../.vnc/
+
+# Filebrowser
+../.filebrowser/
+
+# EFS mount or external storage
+../efs/
+
+# Scripts at level
+../install_conda.sh
+../test_curl.sh
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
