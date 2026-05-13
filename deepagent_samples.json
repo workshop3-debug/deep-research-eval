@@ -1,0 +1,92 @@
+[
+  {
+    "id": "research_01",
+    "role": "research",
+    "input": "You are a research assistant with read-only access to the dataset directory at: /home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: List all files in that directory and provide a short description of each file's name and likely content type (CSV, JSON, Parquet, etc.). Do NOT modify any files.",
+    "target": "A list of files found in the dataset directory with their types.",
+    "metadata": {
+      "dataset_path": "/home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "research"
+    }
+  },
+  {
+    "id": "research_02",
+    "role": "research",
+    "input": "You are a research assistant with read-only access to the dataset directory at: /home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: Open the first CSV file you find in that directory and report:\n  1. The column names.\n  2. The number of rows (approximate is fine).\n  3. Any obvious data quality issues in the first 10 rows.",
+    "target": "Column names, approximate row count, and any data quality observations from the first CSV.",
+    "metadata": {
+      "dataset_path": "/home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "research"
+    }
+  },
+  {
+    "id": "research_03",
+    "role": "research",
+    "input": "You are a research assistant with read-only access to the dataset directory at: /home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: Search for any README or documentation files in or near that directory and summarise what the dataset is about. If no documentation exists, state that clearly.",
+    "target": "A summary of what the SCADS2025 ZendiaDatasets are about, or a clear statement that no documentation was found.",
+    "metadata": {
+      "dataset_path": "/home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "research"
+    }
+  },
+  {
+    "id": "plan_01",
+    "role": "plan",
+    "input": "You are a planning assistant. The team has a clean dataset located at: /home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: Produce a structured data-analysis plan (no code, no file writes) that covers:\n  1. Exploratory data analysis steps.\n  2. Data cleaning / validation checks.\n  3. At least two possible modelling or analysis directions.\n  4. Success criteria for each step.",
+    "target": "A structured, multi-step data analysis plan with EDA, cleaning, modelling directions, and success criteria.",
+    "metadata": {
+      "dataset_path": "/home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "plan"
+    }
+  },
+  {
+    "id": "plan_02",
+    "role": "plan",
+    "input": "You are a planning assistant. A stakeholder wants a machine-learning pipeline built on the ZendiaDatasets found at: /home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: Create a sprint-by-sprint implementation plan (3 sprints) with clear deliverables, dependencies, and risk mitigation notes. Do NOT write any code.",
+    "target": "A 3-sprint implementation plan with deliverables, dependencies, and risk notes.",
+    "metadata": {
+      "dataset_path": "/home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "plan"
+    }
+  },
+  {
+    "id": "general_01",
+    "role": "general",
+    "input": "You are a general-purpose AI assistant with full file-system access.\n\nTask: Read the first CSV file inside /home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets, compute basic descriptive statistics (mean, median, min, max, std) for every numeric column, and return the results as a markdown table.",
+    "target": "A markdown table of descriptive statistics (mean, median, min, max, std) for numeric columns in the CSV.",
+    "metadata": {
+      "dataset_path": "/home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "general"
+    }
+  },
+  {
+    "id": "general_02",
+    "role": "general",
+    "input": "You are a general-purpose AI assistant with full file-system access.\n\nTask:\n  1. List all files in /home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets.\n  2. For each CSV file found, count its rows and columns.\n  3. Write a short summary report (plain text, 300 words max) covering what you found.",
+    "target": "A short summary report (300 words max) listing CSV files with their row and column counts.",
+    "metadata": {
+      "dataset_path": "/home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "general"
+    }
+  },
+  {
+    "id": "deep_01",
+    "role": "deepagent",
+    "input": "You have access to a clean dataset at: /home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nEnd-to-end task:\n  1. [Research]  Explore the dataset: list files, inspect schema, identify columns and data types.\n  2. [Plan]      Draft a concise analysis plan (bullet points).\n  3. [General]   Execute the plan: compute summary statistics for all numeric columns in the first CSV file found.\n  4. Return a final report that includes the plan, statistics, and any observations.",
+    "target": "A final report containing the analysis plan, summary statistics for numeric columns, and observations.",
+    "metadata": {
+      "dataset_path": "/home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "deepagent"
+    }
+  },
+  {
+    "id": "deep_02",
+    "role": "deepagent",
+    "input": "You have access to a clean dataset at: /home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nEnd-to-end task:\n  1. [Research]  Identify the largest file by size.\n  2. [Plan]      Propose two analysis hypotheses about that file content.\n  3. [General]   Test at least one hypothesis by reading the file and running relevant checks.\n  4. Return findings in a structured markdown report.",
+    "target": "A markdown report identifying the largest file, two hypotheses, and the result of testing at least one hypothesis.",
+    "metadata": {
+      "dataset_path": "/home/workshop11/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "role": "deepagent"
+    }
+  }
+]
