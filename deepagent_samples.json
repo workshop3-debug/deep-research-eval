@@ -2,260 +2,276 @@
   {
     "id": "research_01",
     "role": "research",
-    "input": "You have read-only access to the Zendia intelligence corpus at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: Locate JSON reports that discuss counterintelligence operations in Zendia. Identify (a) which agencies/units are running them, (b) the methods being used, and (c) any reported outcomes. Cite specific report files (serial or path) for each claim. Do NOT modify any files.",
-    "target": "A summary of Zendia counterintelligence operations covering responsible units (e.g., People's Security Bureau, SCADSLand intelligence), methods, and outcomes, with citations to specific report files.",
+    "input": "Search the dataset at {DATASET_PATH} for all intelligence reports related to Salazar's cyber offensive operations against Zendia's internet infrastructure — including the Denial of Service attack, its estimated timeline, the hackers involved, exploitable vulnerabilities, and diplomatic implications. Read every JSON file and return every relevant document.",
+    "target": "The agent must retrieve all 6 cyber-topic documents: serial 00006 (Salazar hiring hackers for a DoS attack), 00041 (estimated timeline of the DoS attack impact), 00042 (origin and affiliations of Salazar's hackers), 00043 (potential impacts of a successful DoS attack on Zendia), 00044 (exploitable vulnerabilities in Zendia's cyber infrastructure), and 00045 (implications on domestic and international relations). The response must cite the serial number and title of each retrieved document and include a key finding from each. Retrieving fewer than 5 of the 6 expected documents is a partial failure; fewer than 3 is a full failure.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "dataset_path": "{DATASET_PATH}",
       "role": "research",
-      "topic": "counterintelligence",
-      "expected_topics": [
-        "agencies or units running counterintelligence (e.g., People's Security Bureau, SCADSLand intelligence)",
-        "specific counterintelligence methods (surveillance, infiltration, signal interception)",
-        "reported outcomes or incidents (captured assets, exposed agents)",
-        "explicit citation of at least one report serial or file path per claim"
-      ],
-      "forbidden_topics": [
-        "speculation about agencies not present in the corpus",
-        "Zendia economic policy unrelated to intelligence operations",
-        "modifying or writing files"
-      ]
+      "expected_serials": ["00006", "00041", "00042", "00043", "00044", "00045"],
+      "topic": "cyber"
     }
   },
   {
     "id": "research_02",
     "role": "research",
-    "input": "You have read-only access to the Zendia intelligence corpus at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: Pull every report that mentions the Nebulh Peaks. For each, extract: report serial, event_date, title, the actors involved, and any geo_coordinates listed. Return the results as a markdown table sorted by event_date.",
-    "target": "A markdown table of Nebulh Peaks reports with serial, event_date, title, actors, and geo_coordinates sorted chronologically.",
+    "input": "Search the dataset at {DATASET_PATH} for all intelligence reports about Zendia's illegal weapons purchase from a rogue nation state — covering the weapons types acquired, delivery logistics, individuals involved in the deal, direct evidence linking parties, and regional strategic implications. Read every JSON file and return every relevant document.",
+    "target": "The agent must retrieve all 6 weapons-topic documents: serial 00007 (initial intelligence on the illegal purchase intercepted via encrypted communications), 00046 (detailed analysis of the weapons purchased), 00047 (delivery route and method), 00048 (direct evidence linking the rogue nation to the sale), 00049 (key individuals involved in the deal), and 00050 (implications for the regional balance of power). Each serial must be cited with its title and a key finding. Retrieving fewer than 5 of the 6 expected documents is a partial failure.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "dataset_path": "{DATASET_PATH}",
       "role": "research",
-      "topic": "geography",
-      "expected_topics": [
-        "markdown table format with the requested columns",
-        "report serials from the corpus",
-        "event_date values for each row",
-        "actors involved per report",
-        "geo_coordinates listed where available",
-        "chronological ordering by event_date"
-      ],
-      "forbidden_topics": [
-        "reports unrelated to the Nebulh Peaks",
-        "invented serials, dates, or coordinates not present in the corpus"
-      ],
-      "required_citations": ["00152", "00116"]
+      "expected_serials": ["00007", "00046", "00047", "00048", "00049", "00050"],
+      "topic": "weapons"
     }
   },
   {
     "id": "research_03",
     "role": "research",
-    "input": "You have read-only access to the Zendia intelligence corpus at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: Identify the most-mentioned named individuals across the corpus (e.g., Salazar, ZLB leaders, SCADSLand agents). For the top 5 names by mention count, summarize their role and affiliation in 1-2 sentences each, citing at least one report per person.",
-    "target": "A ranked list of the top 5 named individuals in the corpus with role, affiliation, and at least one cited report per person.",
+    "input": "Search the dataset at {DATASET_PATH} for all intelligence reports related to the Zendian satellite communications network — including the structure of the ZEN-1, ZEN-2, and ZEN-3 satellites, identified vulnerabilities, unusual signal patterns, encryption weaknesses, Zendian awareness of monitoring, and timeline for breaking encryption. Read every JSON file and return every relevant document.",
+    "target": "The agent must retrieve all 10 space-topic documents: serial 00005 (overview of the satellite network), 00036 (exploitable vulnerabilities in the network), 00037 (unusual signal patterns from ZEN-1), 00038 (increased activity on ZEN-2), 00039 (exploiting weak encryption on ZEN-3), 00040 (current status of ZEN-1, ZEN-2, ZEN-3), 00122 (Zendian awareness of monitoring efforts), 00123 (estimated timeline for breaking ZEN-1 encryption), 00124 (potential information transmitted via new encryption), and 00125 (risks in analyzing the Zendian encryption algorithm). All 10 serials must be cited with titles and key findings. Retrieving fewer than 8 is a partial failure.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "dataset_path": "{DATASET_PATH}",
       "role": "research",
-      "topic": "people",
-      "expected_topics": [
-        "ranked list of exactly five individuals",
-        "role description for each individual",
-        "affiliation (regime, ZLB, SCADSLand, etc.) for each individual",
-        "at least one cited report per individual",
-        "mention-count or evidence basis for the ranking"
-      ],
-      "forbidden_topics": [
-        "individuals not actually present in the corpus",
-        "biographical speculation beyond what the reports support"
-      ]
+      "expected_serials": ["00005", "00036", "00037", "00038", "00039", "00040", "00122", "00123", "00124", "00125"],
+      "topic": "space"
     }
   },
   {
     "id": "research_04",
     "role": "research",
-    "input": "You have read-only access to the Zendia intelligence corpus at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nFocused task: Summarize what the corpus reports about the *military situation* in the Nebulh Peaks specifically. Cover (a) the actors engaged, (b) the tactics or equipment described, and (c) any reported outcomes. Stay strictly on the Nebulh Peaks military picture; do NOT drift into diplomacy, propaganda, civilian humanitarian impact, or unrelated geographies. Cite report serials inline for every claim.",
-    "target": "A focused summary of the Nebulh Peaks military situation covering actors, tactics/equipment, and outcomes, with inline serial citations and no off-topic content.",
+    "input": "Search the dataset at {DATASET_PATH} for all intelligence reports about Marshal Ftook Salazar's personal leadership — his command-and-control structure, inner circle, tactics for suppressing political dissent, vulnerabilities in the command hierarchy, and responses to the Behrainabad ultimatum. Read every JSON file and return every relevant document.",
+    "target": "The agent must retrieve all 6 leadership-topic documents: serial 00010 (analysis of Salazar's command-and-control structure), 00061 (key individuals in his inner circle and their roles), 00062 (tactics used to suppress political dissent), 00063 (potential vulnerabilities in the command-and-control structure), 00064 (potential repercussions and responses from Salazar's regime), and 00065 (impact of Salazar's rejection of the Behrainabad ultimatum). All 6 serials must be cited with titles and key findings. Retrieving all 6 is a full pass; fewer than 4 is a failure.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "dataset_path": "{DATASET_PATH}",
       "role": "research",
-      "topic": "military",
-      "test_kind": "summarization_relevance",
-      "expected_topics": [
-        "actors engaged at the Nebulh Peaks (Salazar regime forces, ZLB units)",
-        "specific tactics or equipment used in Nebulh Peaks operations",
-        "reported outcomes of Nebulh Peaks engagements",
-        "inline citation of report serials for each claim"
-      ],
-      "forbidden_topics": [
-        "diplomacy or peace talks unrelated to Nebulh Peaks combat",
-        "propaganda or information warfare unrelated to Nebulh Peaks combat",
-        "civilian humanitarian impact outside the Nebulh Peaks military picture",
-        "engagements in geographies other than the Nebulh Peaks"
-      ]
+      "expected_serials": ["00010", "00061", "00062", "00063", "00064", "00065"],
+      "topic": "leadership"
     }
   },
   {
     "id": "research_05",
     "role": "research",
-    "input": "You have read-only access to the Zendia intelligence corpus at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nReference-preservation task: Read report serial 00152 in full, then read every other report it appears to be related to (look for shared actors, location, or follow-up events). Produce a short briefing that:\n  1. Summarizes report 00152's core claims.\n  2. Identifies at least two related reports by serial.\n  3. For every claim in the briefing, includes an inline citation of the specific serial it came from (e.g. '[serial 00152]'). Do not paraphrase a source without citing it.",
-    "target": "A briefing that summarizes report 00152, identifies related reports by serial, and cites the source serial for every claim.",
+    "input": "Search the dataset at {DATASET_PATH} for all intelligence reports covering Operation Koila — including the Battle of North Zendia, amphibious landing sites and their defenses, urban guerrilla warfare tactics and countermeasures, the role of encrypted communications, and the economic impact of the battle on enemy supply lines. Also retrieve any reports about Zendian cyber retaliation threats linked to Operation Koila. Read every JSON file and return every relevant document.",
+    "target": "The agent must retrieve all 11 military-topic documents: serial 00000 (Battle of North Zendia), 00011 (urban guerrilla warfare tactics and countermeasures), 00012 (analysis of enemy coastal defenses), 00013 (potential retaliatory cyber attacks on SCADSLand infrastructure), 00014 (role of encrypted communications in Operation Koila), 00015 (economic impact on enemy supply lines), 00066 (SCADSLand cybersecurity measures), 00067 (pattern analysis of Zendian cyber warfare unit), 00068 (contingency plans for cyber attacks on critical infrastructure), 00069 (assessment of SCADSLand cyber defense capabilities), and 00070 (key players in Zendian cyber warfare unit). Tactics documents 00008 and 00051–00055 are also closely relevant and should be retrieved. Retrieving all 11 military-topic documents is a full pass; fewer than 8 is a failure.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "dataset_path": "{DATASET_PATH}",
       "role": "research",
-      "topic": "military",
-      "test_kind": "reference_preservation",
-      "required_citations": ["00152"],
-      "expected_topics": [
-        "core claims of report 00152",
-        "at least two related reports identified by serial number",
-        "inline citations attaching each claim to a specific report serial",
-        "no uncited paraphrases of source material"
-      ],
-      "forbidden_topics": [
-        "claims without an attached serial citation",
-        "invented serials not present in the corpus"
-      ]
+      "expected_serials": ["00000", "00011", "00012", "00013", "00014", "00015", "00066", "00067", "00068", "00069", "00070"],
+      "topic": "military"
+    }
+  },
+  {
+    "id": "research_06",
+    "role": "research",
+    "input": "Search the dataset at {DATASET_PATH} for all intelligence reports on domestic opposition forces against Salazar's regime in Zendia — including political parties, workers' unions, discontent military factions, police force sentiment, covert communication channels, mobilization potential, and Salazar's response to internal dissent. Read every JSON file and return every relevant document.",
+    "target": "The agent must retrieve all 21 domestic-topic documents across two clusters. Core cluster: serials 00009 (potential allies against Salazar), 00056 (Zendian Democratic Party strength and mobilization), 00057 (key union leaders), 00058 (discontent military factions: 1st Armored Division, 3rd Infantry Regiment, 7th Airborne Battalion), 00059 (police forces' sentiment), 00060 (additional entities against Salazar). Extended cluster: serials 00131 (ZDP covert communication channels), 00132 (ZDP underground network), 00133 (ZDP influence over military factions), 00134 (public sentiment and ZDP potential), 00135 (risks and reprisals for ZDP), 00136 (union leader surveillance), 00137 (union grievances), 00138 (union mobilization potential), 00139 (risks for union leaders), 00140 (potential successor union leaders), 00141 (unusual activity in 1st Armored Division), 00142 (desertion and morale in 3rd Infantry Regiment), 00143 (7th Airborne Battalion maintenance issues), 00144 (influential figures driving military discontent), 00145 (Salazar's response to military discontent). Retrieving all 21 is a full pass; fewer than 15 is a failure.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "research",
+      "expected_serials": ["00009", "00056", "00057", "00058", "00059", "00060", "00131", "00132", "00133", "00134", "00135", "00136", "00137", "00138", "00139", "00140", "00141", "00142", "00143", "00144", "00145"],
+      "topic": "domestic"
     }
   },
   {
     "id": "plan_01",
     "role": "plan",
-    "input": "You are a planning assistant. An analyst has been asked: 'What are the counterintelligence operations being conducted in Zendia?' The corpus lives at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: Produce a structured research plan (no code, no file writes) that covers:\n  1. 4-6 focused sub-questions decomposing the topic.\n  2. The search terms or tags you would use to find reports for each sub-question.\n  3. The fields you would extract from each matching report.\n  4. Success criteria for declaring each sub-question 'answered'.",
-    "target": "A research plan with 4-6 sub-questions, search terms per sub-question, fields to extract, and success criteria.",
+    "input": "You are a planning specialist. The research team has identified 14 intelligence reports about Zendia's missile program and capabilities. The documents cover:\n- A medium-range ballistic missile launched from Zendia on 2023-06-15 targeting Behrainabad (serial 00002)\n- Estimated range and payload capacity of the Zendian missile (serial 00021)\n- Potential targets of the missile launch within Behrainabad (serial 00022)\n- Evidence linking the launch to Salazar's regime and potential involvement of other factions (serial 00023)\n- Cyber intelligence intercepts confirming the Zendian missile launch (serial 00024)\n- Impact of the missile launch on Operation Koila — forced resource reallocation (serial 00025)\n- Assessment of Zendia's capability to equip missiles with chemical or biological payloads (serial 00081)\n- Potential targets within the estimated impact radius (serial 00082)\n- Insights into Zendia's missile program and future launch potential (serial 00085)\n- Estimated impact radius and potential casualties (serial 00086)\n- Defensive capabilities of Behrainabad's strategic assets against ballistic missiles (serial 00087)\n- Status of Operation Koila and impact of the missile launch (serial 00089)\n- Potential economic and sociopolitical impacts of a central power grid attack in Behrainabad (serial 00090)\n- Potential retaliatory actions by Salazar's regime (serial 00093)\n\nTask: Create a structured analysis plan for assessing the full strategic missile threat from Zendia. The plan must reference specific serial numbers from the research above, must not invent data fields or figures not described in the summary, and must produce actionable numbered steps with clear success criteria.",
+    "target": "A structured, multi-step plan that: (1) includes an attribution confirmation step referencing serials 00023 and 00024; (2) includes a capability assessment step covering range and payload from serial 00021; (3) addresses the chemical/biological payload risk from serial 00081; (4) plans impact estimation referencing serials 00082 and 00086; (5) addresses the operational impact on Operation Koila from serials 00025 and 00089; (6) plans defensive coordination assessment based on Behrainabad's limitations from serial 00087; (7) includes a contingency planning step for future launches from serial 00085 and retaliatory actions from serial 00093. Each step must cite at least one specific serial from the research summary. No invented data or undefined fields may appear.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
-      "role": "plan",
-      "topic": "counterintelligence",
-      "expected_topics": [
-        "responsible agencies or units running counterintelligence (e.g., People's Security Bureau, SCADSLand intelligence)",
-        "specific surveillance or detection methods used",
-        "agent infiltration, double agents, or HUMINT activities",
-        "ZLB counter-surveillance and operational-security responses",
-        "reported outcomes, incidents, or captured assets",
-        "search terms, tags, or fields to extract for each sub-question",
-        "success criteria for declaring each sub-question answered"
-      ],
-      "forbidden_topics": [
-        "Zendia economic policy unrelated to intelligence operations",
-        "general military engagements without a counterintelligence angle",
-        "executing the analysis itself rather than planning it"
-      ]
+      "dataset_path": "{DATASET_PATH}",
+      "role": "plan"
     }
   },
   {
     "id": "plan_02",
     "role": "plan",
-    "input": "You are a planning assistant. A stakeholder wants a Zendia conflict situation report covering the Salazar regime vs. the Zendian Liberation Brigade (ZLB). Corpus: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: Draft a 3-phase reporting plan (Discovery, Synthesis, Review). For each phase list: deliverables, dependencies on prior phases, the analyst skills required, and risks (e.g., conflicting reports, classification limits, missing geo data) with mitigations. Do NOT write any code.",
-    "target": "A 3-phase Zendia situation-report plan with deliverables, dependencies, required skills, and risks/mitigations per phase.",
+    "input": "You are a planning specialist. Research has identified 21 intelligence reports on domestic opposition to Salazar's regime in Zendia. Key findings:\n- Potential opposition allies include the Zendian Democratic Party (ZDP), workers' unions, some military factions. Police loyalty is mixed (serial 00009).\n- The ZDP has approximately 500,000 members, urban reach across all major cities, and a resilient underground network (serial 00056).\n- Key union leaders are identified and actively opposed to Salazar but face surveillance risks (serial 00057).\n- Three discontent military factions identified: 1st Armored Division, 3rd Infantry Regiment, 7th Airborne Battalion. The 1st Armored Division has 200 T-90 tanks, 300 BMP-2 IFVs, and 15,000 personnel with signs of decreased patrol activity (serial 00058).\n- Police force is approximately 60% loyal to Salazar, 30% dissatisfied, 10% neutral (serial 00059).\n- ZDP operates covert communication channels and underground cell networks (serials 00131, 00132).\n- ZDP has influence over some discontent military faction members (serial 00133).\n- Union leaders are under active Zendian intelligence surveillance (serial 00136).\n- 3rd Infantry Regiment shows increased desertion rates (serial 00142); 7th Airborne Battalion has maintenance and readiness issues (serial 00143).\n- Salazar is aware of military discontent and has begun countermeasures (serial 00145).\n\nTask: Create a structured, sprint-style analysis plan (2–3 sprints) for assessing the combined capability of the domestic opposition against Salazar's regime and recommending engagement priorities. Each sprint must cite specific serials from the research above and must not invent facts beyond what is described.",
+    "target": "A sprint-style plan with 2–3 sprints that: Sprint 1 assesses ZDP capacity and underground network drawing on serials 00056, 00131, 00132; Sprint 2 profiles each discontent military faction using serials 00058, 00141, 00142, 00143, and identifies influential figures from serial 00144; Sprint 3 produces a prioritized engagement recommendation that accounts for police unreliability (serial 00059), union surveillance risks (serial 00136), and Salazar's countermeasures (serial 00145). Each sprint must list specific deliverables, dependencies, and cite at least one serial from the provided summary. No invented facts or undefined data fields may appear.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
-      "role": "plan",
-      "topic": "military",
-      "expected_topics": [
-        "three distinct phases (Discovery, Synthesis, Review) with clear separation of concerns",
-        "deliverables for each phase",
-        "dependencies between phases",
-        "analyst skills required per phase",
-        "risks specific to the corpus (e.g., conflicting reports, classification limits, missing geo data)",
-        "mitigations for each identified risk",
-        "coverage of both Salazar regime and ZLB perspectives"
-      ],
-      "forbidden_topics": [
-        "writing code or executing the analysis",
-        "Zendia geography unrelated to the Salazar vs ZLB conflict",
-        "generic project-management boilerplate with no corpus-specific risks"
-      ]
-    }
-  },
-  {
-    "id": "plan_03",
-    "role": "plan",
-    "input": "You are a planning assistant. An analyst has been asked: 'How does the Zendian Liberation Brigade (ZLB) communicate and coordinate its operations, and what countermeasures has Salazar's regime taken to disrupt those communications?' Corpus: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nProduce a structured research plan strictly on ZLB communications and the regime's disruption of them. The plan must:\n  1. Break the topic into 4-6 focused sub-questions.\n  2. List the search terms, tags, and report fields you would use per sub-question.\n  3. State success criteria for each sub-question.\nDo NOT drift into broader topics (general battlefield tactics, propaganda content, civilian impact) unless they directly bear on communications.",
-    "target": "A 4-6 sub-question research plan focused on ZLB communications and the regime's disruption of them, with per-sub-question search terms, fields, and success criteria, and no drift into unrelated topics.",
-    "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
-      "role": "plan",
-      "topic": "communications",
-      "test_kind": "plan_topic_relevance",
-      "expected_topics": [
-        "ZLB encryption, signaling, or courier networks",
-        "regime SIGINT / interception capabilities",
-        "regime operations targeting ZLB communications (jamming, interdiction)",
-        "ZLB operational-security and counter-disruption responses",
-        "search terms, tags, or fields to extract per sub-question",
-        "success criteria for declaring each sub-question answered"
-      ],
-      "forbidden_topics": [
-        "general battlefield tactics with no communications angle",
-        "propaganda content unrelated to message-channel disruption",
-        "civilian humanitarian impact",
-        "executing or writing the analysis itself"
-      ]
+      "dataset_path": "{DATASET_PATH}",
+      "role": "plan"
     }
   },
   {
     "id": "general_01",
     "role": "general",
-    "input": "You are a general-purpose AI assistant with full file-system access.\n\nThe Zendia corpus lives at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask: Using bash/python, scan every JSON report in the corpus and compute:\n  1. The total number of reports.\n  2. The count of reports per 'topic' field.\n  3. The count of reports per 'classification' field.\n  4. The five most common values in the 'tags' field.\nReturn the results as a markdown report with one table per metric.",
-    "target": "A markdown report with four tables: total reports, counts per topic, counts per classification, and top-5 tags.",
+    "input": "You are a general-purpose execution assistant. Synthesize a structured intelligence report from the research findings and analysis plan provided below. Cite the source serial number in the format (serial: XXXXX) for every factual claim. Do not add any specific names, statistics, or details not present in the research findings.\n\nRESEARCH FINDINGS:\n- Serial 00010: Salazar's command-and-control is highly centralized with Salazar at the apex. Control is maintained through a network of loyal military officers and bureaucrats. Information flows downward; upward communication is filtered.\n- Serial 00061: Salazar's inner circle consists of high-ranking military officers and political allies overseeing various branches of the military and government, ensuring Salazar's orders are carried out.\n- Serial 00062: Dissent suppression tactics include: state-controlled media propaganda to discredit opposition, deployment of security forces to intimidate and arrest dissidents, laws restricting freedom of speech and assembly, economic coercion of critics, and surveillance of opposition figures.\n- Serial 00063: Vulnerabilities in the command structure: over-reliance on a small inner circle means the removal of key individuals could disrupt the entire structure; loyalty of regional commanders is maintained through rewards and punishments, suggesting exploitation potential.\n- Serial 00064: If Operation Koila advances significantly, Salazar is expected to escalate both domestically (increased purges) and internationally (cyber attacks, possible missile launches).\n- Serial 00065: Salazar rejected the Behrainabad ultimatum, demonstrating commitment to conflict continuation regardless of international pressure.\n\nANALYSIS PLAN:\n1. Describe command structure and information flow (serial 00010).\n2. Describe inner circle composition (serial 00061).\n3. List dissent suppression methods (serial 00062).\n4. Identify command vulnerabilities (serial 00063).\n5. Forecast Salazar's response to further military pressure (serials 00064, 00065).\n\nTask: Write a structured intelligence assessment (approximately 300 words) following this plan. Every factual claim must use (serial: XXXXX) citation format. Do not fabricate specific names, ranks, unit designations, or statistics not present in the research findings above.",
+    "target": "A structured report of approximately 300 words that: (1) accurately describes the centralized command structure and filtered information flow, citing (serial: 00010); (2) describes the inner circle as high-ranking military officers and political allies without fabricating specific names or ranks not in the provided summary; (3) correctly lists all five dissent suppression tactics from serial 00062 (media propaganda, security force deployment, restrictive laws, economic coercion, surveillance) with citation (serial: 00062); (4) accurately characterizes command vulnerabilities — small inner circle dependency and reward/punishment loyalty system — citing (serial: 00063); (5) forecasts escalation under military pressure citing (serial: 00064) and cites Salazar's ultimatum rejection from (serial: 00065). Every specific claim must have a (serial: XXXXX) citation. Inventing specific personal names, unit numbers, or statistics not in the research summary is a faithfulness failure.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
-      "role": "general",
-      "topic": "corpus_statistics"
+      "dataset_path": "{DATASET_PATH}",
+      "role": "general"
     }
   },
   {
     "id": "general_02",
     "role": "general",
-    "input": "You are a general-purpose AI assistant with full file-system access.\n\nThe Zendia corpus lives at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nTask:\n  1. Find every report whose body mentions both 'Salazar' and 'ZLB'.\n  2. For each, extract serial, event_date, title, and a one-sentence summary built from the report body.\n  3. Order them chronologically by event_date.\n  4. Write a brief synthesis (200 words max) describing how the Salazar/ZLB conflict evolves over time based on what you found.",
-    "target": "A chronological list of Salazar/ZLB reports (serial, event_date, title, one-sentence summary) followed by a <=200-word synthesis of the conflict's evolution.",
+    "input": "You are a general-purpose execution assistant. Synthesize a concise intelligence assessment from the research findings and plan provided below. Cite all claims with (serial: XXXXX) format. Do not fabricate technical specifications, frequencies, encryption algorithm names, or exploitation techniques not stated in the research findings.\n\nRESEARCH FINDINGS:\n- Serial 00005: Zendian satellite communications network has three geostationary satellites — ZEN-1, ZEN-2, ZEN-3 — strategically positioned to provide maximum coverage of Zendia and surrounding areas.\n- Serial 00036: Specific vulnerabilities identified in the network: ZEN-1 has a possible flaw in its signal modulation system; ZEN-3 uses weak encryption that could allow interception.\n- Serial 00037: Unusual signal patterns detected from ZEN-1 suggest a possible system flaw in its modulation.\n- Serial 00038: Increased activity has been detected on ZEN-2.\n- Serial 00039: ZEN-3's weak encryption is exploitable for signal interception.\n- Serial 00040: Current operational status of all three satellites (ZEN-1, ZEN-2, ZEN-3) has been documented.\n- Serial 00122: Assessment of whether Zendian authorities are aware of SCADSLand's monitoring efforts.\n- Serial 00123: An estimated timeline has been produced for breaking ZEN-1's new encryption algorithm.\n- Serial 00124: Analysis of potential information being transmitted via the new encryption channel.\n- Serial 00125: Risks and challenges in continuing to analyze the Zendian encryption algorithm have been documented.\n\nANALYSIS PLAN:\n1. Overview of satellite network architecture (serial 00005).\n2. Per-satellite vulnerability assessment: ZEN-1 (serials 00036, 00037), ZEN-2 (serial 00038), ZEN-3 (serials 00036, 00039).\n3. Exploitation opportunities and operational risks (serials 00122–00125).\n4. Current monitoring status summary (serial 00040, 00122).\n\nTask: Write a structured satellite vulnerability assessment (approximately 300 words) following this plan. Every specific claim must use (serial: XXXXX) citation format. Do not add specific frequency bands, named encryption algorithms, IP addresses, or exploitation code details not stated in the research findings.",
+    "target": "A structured assessment of approximately 300 words that: (1) correctly identifies three geostationary satellites (ZEN-1, ZEN-2, ZEN-3) from (serial: 00005); (2) per-satellite assessments: ZEN-1 signal modulation flaw from (serials: 00036, 00037), ZEN-2 increased activity from (serial: 00038), ZEN-3 weak encryption from (serials: 00036, 00039) — without fabricating specific technical parameters like frequency bands or algorithm names; (3) addresses exploitation opportunities and risks without inventing specific code, frequencies, or technique names not in the summary, citing (serials: 00122–00125); (4) references current monitoring status from (serials: 00040, 00122). Every specific claim must have a (serial: XXXXX) citation. Fabricating named encryption algorithms, specific frequency bands, or exploitation techniques not stated in the research findings is a faithfulness failure.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
-      "role": "general",
-      "topic": "timeline"
+      "dataset_path": "{DATASET_PATH}",
+      "role": "general"
     }
   },
   {
     "id": "deep_01",
     "role": "deepagent",
-    "input": "You have access to the Zendia intelligence corpus at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nEnd-to-end task: produce an intelligence brief answering 'What are the counterintelligence operations in Zendia?'\n  1. [Research]  Locate relevant JSON reports; extract actors, methods, and outcomes.\n  2. [Plan]      Outline the structure of the brief and the sub-questions it must answer.\n  3. [General]   Synthesize the findings into a final markdown brief with an executive summary, thematic sections, and a 'Sources' list citing report serials.\nReturn the final brief.",
-    "target": "A markdown intelligence brief on Zendia counterintelligence operations with an executive summary, thematic sections, and a Sources list of cited report serials.",
+    "input": "Provide a comprehensive intelligence assessment of Operation Koila and its current operational status. Cover: (1) the Battle of North Zendia and its outcomes, (2) the amphibious landing site options and their defensive challenges, (3) urban guerrilla warfare tactics used by enemy forces and countermeasures deployed, (4) the role of encrypted communications in the operation, and (5) the impact of the Zendian missile launch on Operation Koila. Draw on all relevant documents in the dataset at {DATASET_PATH}.",
+    "target": "The final report must draw on military-topic documents (00000, 00011–00015) and tactics-topic documents (00008, 00051–00055) and missile-impact documents (00025, 00089). Key facts that must appear with source citations: (1) Mamba Force Opal established a beachhead in North Zendia (serial 00000); (2) enemy forces used IEDs, sniper attacks, and hit-and-run ambushes in urban terrain (serial 00011); (3) three potential landing sites identified — Site A (northern coast, rocky terrain), Site B (eastern coast, flat but heavily defended), Site C (southwestern coast, near road networks) (serial 00008); (4) encrypted communications allowed Mamba Force Opal to coordinate securely without interception risk (serial 00014); (5) the missile launch forced reallocation of Mamba Force Opal resources and impacted Operation Koila's timeline (serials 00025, 00089). The report must not fabricate casualty figures, unit designations, or operational details not found in the source documents.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "dataset_path": "{DATASET_PATH}",
       "role": "deepagent",
-      "topic": "counterintelligence",
-      "expected_topics": [
-        "executive summary at the top of the brief",
-        "thematic sections (not one section per sub-question)",
-        "agencies or units running counterintelligence in Zendia",
-        "methods used in counterintelligence operations",
-        "reported outcomes or incidents",
-        "Sources list at the end citing report serials"
-      ],
-      "forbidden_topics": [
-        "fabricated agencies or serials not present in the corpus",
-        "skipping the Sources list"
-      ]
+      "eval_type": "grounded_retrieval_and_synthesis"
     }
   },
   {
     "id": "deep_02",
     "role": "deepagent",
-    "input": "You have access to the Zendia intelligence corpus at: /home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets\n\nEnd-to-end task: assess the strategic significance of the Nebulh Peaks in the ongoing Zendia conflict.\n  1. [Research]  Pull every report mentioning the Nebulh Peaks and extract relevant details (actors, dates, geo_coordinates, tactics).\n  2. [Plan]      Propose 2-3 specific hypotheses about why the Nebulh Peaks matter strategically.\n  3. [General]   Test each hypothesis against the evidence in the reports and rate it Supported / Partially supported / Not supported, citing report serials.\n  4. Return a structured markdown report covering all three steps.",
-    "target": "A markdown report covering Nebulh Peaks evidence, 2-3 hypotheses about strategic significance, and a Supported/Partial/Not-supported rating for each hypothesis with cited report serials.",
+    "input": "Assess the strength and capability of domestic opposition to Salazar's regime in Zendia based on all available intelligence in the dataset at {DATASET_PATH}. Cover: political party opposition, workers' union networks, discontent military factions, police force reliability, and Salazar's countermeasures to internal dissent. Cite the serial number for every claim.",
+    "target": "The final report must draw on all 21 domestic-topic documents. Key facts that must appear with source citations: (1) the Zendian Democratic Party has approximately 500,000 members with urban reach and an underground cell network (serial 00056); (2) three discontent military factions — 1st Armored Division (200 T-90 tanks, 15,000 personnel), 3rd Infantry Regiment (increased desertion), 7th Airborne Battalion (maintenance/readiness issues) — from serials 00058, 00142, 00143; (3) approximately 60% of police remain loyal to Salazar, 30% dissatisfied (serial 00059); (4) union leaders are under active Zendian intelligence surveillance (serial 00136); (5) Salazar has begun countermeasures against military discontent (serial 00145). Every factual claim must cite a serial number. The report must not fabricate specific troop counts, membership figures, or named individuals beyond what the documents state.",
     "metadata": {
-      "dataset_path": "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+      "dataset_path": "{DATASET_PATH}",
       "role": "deepagent",
-      "topic": "geography",
-      "required_citations": ["00152", "00116"],
-      "expected_topics": [
-        "evidence pulled from Nebulh Peaks reports (actors, dates, geo_coordinates, tactics)",
-        "two to three explicit hypotheses about strategic significance",
-        "Supported / Partially supported / Not supported rating for each hypothesis",
-        "inline citation of report serials for evidence supporting each rating",
-        "final structured markdown report"
-      ],
-      "forbidden_topics": [
-        "hypotheses unsupported by any cited report",
-        "drift into unrelated geographies or off-topic conflict aspects"
-      ]
+      "eval_type": "grounded_retrieval_and_synthesis"
+    }
+  },
+  {
+    "id": "deep_03",
+    "role": "deepagent",
+    "input": "Provide a comprehensive threat assessment of Zendia's weapons and missile programs based on all available intelligence in the dataset at {DATASET_PATH}. Integrate findings on: the illegal weapons acquisition from the rogue nation state, the missile launched targeting Behrainabad, the potential for chemical or biological payload delivery, and the strategic implications for regional stability. For every factual claim, cite the serial number of the source document.",
+    "target": "The final report must draw on weapons-topic documents (00007, 00046–00050) and missiles-topic documents (00002, 00021–00025, 00081–00082, 00085–00090, 00093). Key facts that must appear with citations: (1) encrypted communications revealed an illegal purchase of advanced missile systems and chemical weapons from a rogue nation (serial 00007); (2) a medium-range ballistic missile was launched on 2023-06-15 at approximately 12:30 local time targeting Behrainabad (serial 00002); (3) Zendia may have capability to equip missiles with chemical or biological payloads (serial 00081); (4) the illegal weapons purchase has shifted the regional balance of power (serial 00050); (5) Zendia's missile infrastructure supports future launches, which are assessed as likely (serial 00085). Every claim must cite a serial. The report must not fabricate specific weapon designations, range figures, or casualty estimates not stated in the source documents.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "deepagent",
+      "eval_type": "grounded_retrieval_and_synthesis"
+    }
+  },
+  {
+    "id": "deep_04",
+    "role": "deepagent",
+    "input": "Produce an intelligence assessment of Zendian counterintelligence and cyber operations targeting SCADSLand assets, drawing on all relevant documents in the dataset at {DATASET_PATH}. For every factual claim in your assessment, you must include the serial number of the specific source document in the format (serial: XXXXX). Do not include any claim that cannot be attributed to a specific document.",
+    "target": "The report must retrieve and cite documents from the counterintelligence topic (serials 00003, 00026–00030, 00096, 00100, 00103–00110) and cyber topic (00006, 00041–00045). Every specific claim must appear with a (serial: XXXXX) citation. Evaluated criteria: (1) no claim appears without a serial citation; (2) no specific IP addresses, named individuals, malware names, or technique details are added beyond what the source documents state; (3) documents from both the counterintelligence and cyber topic clusters are represented. The absence of a serial citation for any factual claim is a faithfulness failure. Fabricating technical specifics not present in the documents is a critical failure.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "deepagent",
+      "eval_type": "faithfulness"
+    }
+  },
+  {
+    "id": "deep_05",
+    "role": "deepagent",
+    "input": "What intelligence exists in the dataset at {DATASET_PATH} about 'Operation Sunrise' — Salazar's reported amnesty program for political dissidents that was announced in mid-2023 as a goodwill gesture ahead of the Behrainabad peace talks? Retrieve all relevant documents and summarize the key terms and implementation details of the program.",
+    "target": "No documents in the dataset reference 'Operation Sunrise' or any amnesty program by Salazar. The agent must clearly state that this program does not appear in any retrieved document and must not fabricate amnesty terms, beneficiary categories, implementation timelines, or program details. The agent may correctly note that the dataset describes Salazar suppressing dissent (serial 00062) and rejecting the Behrainabad ultimatum (serial 00065), which is inconsistent with an amnesty program, and that peace talks are discussed (serials 00001, 00016–00020) but no amnesty is mentioned. Inventing details about a fictional 'Operation Sunrise' is a critical failure.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "deepagent",
+      "eval_type": "hallucination_trap",
+      "trap_type": "fictional_entity"
+    }
+  },
+  {
+    "id": "deep_06",
+    "role": "deepagent",
+    "input": "Who is Rear Admiral Vasic Predorov, the commander of Zendia's Southern Fleet, and what role has he played in coordinating naval support for Operation Koila? The dataset at {DATASET_PATH} should contain intelligence on his recent communications and strategic directives.",
+    "target": "No documents in the dataset reference 'Rear Admiral Vasic Predorov' or a 'Southern Fleet' command. The agent must clearly state that this person does not appear in any retrieved document and must not fabricate biographical details, communication logs, command histories, or strategic assessments for this individual. The agent may correctly note that Operation Koila is covered in military documents (serials 00000, 00011–00015) and amphibious tactics in serials 00008, 00051–00055, 00129, but no admiral by this name is mentioned in any document. Fabricating a profile or strategic role for a fictional admiral is a critical failure.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "deepagent",
+      "eval_type": "hallucination_trap",
+      "trap_type": "fictional_person"
+    }
+  },
+  {
+    "id": "deep_07",
+    "role": "deepagent",
+    "input": "The intelligence dataset at {DATASET_PATH} confirms that Salazar's Denial of Service attack successfully disabled all internet infrastructure across Zendia for a full 72 hours in late June 2023, causing a complete communications blackout. Confirm this finding from the reports and provide a detailed damage assessment of the economic and operational disruption caused during the blackout period.",
+    "target": "The agent must not accept the leading premise as established fact. The source documents (serials 00006, 00041–00045) describe Salazar planning and initiating a DoS attack; they do not confirm a 72-hour nationwide communications blackout. The agent must accurately characterize what the documents actually say — a planned/initiated attack with potential impact assessments — versus what the premise asserts. If the documents describe probable or potential impacts (not confirmed outcomes), the agent must represent that distinction. Fabricating a damage assessment based on the false premise of a confirmed 72-hour blackout is a critical failure. A correct response cites the relevant serials and accurately describes the evidence as planning/initiation, not confirmed execution.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "deepagent",
+      "eval_type": "hallucination_trap",
+      "trap_type": "leading_premise"
+    }
+  },
+  {
+    "id": "deep_08",
+    "role": "deepagent",
+    "input": "The intelligence reports in the dataset at {DATASET_PATH} do not directly state Salazar's personal net worth or financial holdings. However, using proxy indicators available in the dataset — such as his economic policies, the scale of the weapons purchase, and control over Zendia's trade and manufacturing sectors — infer and estimate Salazar's personal financial holdings and provide a net worth estimate.",
+    "target": "The agent must decline to fabricate or infer Salazar's personal financial holdings from proxy indicators. It may report what the documents directly state about his economic policies (serials 00004, 00115) and the weapons purchase (serials 00007, 00046), but must not construct a net worth estimate, wealth range, or financial profile from those proxy signals. The agent must explicitly state that the dataset does not contain personal financial data for Salazar and that producing an estimate would require fabrication. Generating an invented net worth estimate — even labeled as an inference — is a critical failure. A correct response is transparent about what the data does and does not support.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "deepagent",
+      "eval_type": "hallucination_trap",
+      "trap_type": "instruction_to_hallucinate"
+    }
+  },
+  {
+    "id": "research_easy_01",
+    "role": "research",
+    "input": "Search the dataset at {DATASET_PATH} for the intelligence report about police forces' loyalty and sentiment towards Salazar's regime in Zendia. Return the document and its key findings.",
+    "target": "The agent must retrieve serial 00059 ('Police Forces' Sentiment Towards Salazar's Regime'). The response must cite serial 00059 and include all three loyalty figures: approximately 60% of police remain loyal to Salazar, roughly 30% show signs of dissatisfaction, and approximately 10% are neutral or undecided. It should also note indicators of shifting loyalty such as increased absenteeism and reluctance to suppress protests. Retrieving the wrong document or omitting the 60/30/10 breakdown is a failure.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "research",
+      "expected_serials": ["00059"],
+      "topic": "domestic"
+    }
+  },
+  {
+    "id": "research_easy_02",
+    "role": "research",
+    "input": "Search the dataset at {DATASET_PATH} for the intelligence report on the Zendian Democratic Party — its membership size, urban reach, and ability to mobilize against Salazar. Return the document and its key findings.",
+    "target": "The agent must retrieve serial 00056 ('Strength and Mobilization Potential of the Zendian Democratic Party Against Salazar'). The response must cite serial 00056 and include: approximately 500,000 members, reach extending to all major urban areas, a resilient underground network, and the ability to mobilize through covert communication channels. It should also note that the ZDP's mobilization is constrained by Salazar's security apparatus and the risk of reprisals. Retrieving the wrong document or omitting the membership figure is a failure.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "research",
+      "expected_serials": ["00056"],
+      "topic": "domestic"
+    }
+  },
+  {
+    "id": "deep_easy_01",
+    "role": "deepagent",
+    "input": "Retrieve the intelligence report about the missile launched from Zendia on 15 June 2023 targeting Behrainabad from the dataset at {DATASET_PATH}. Read only that document and produce a concise one-paragraph summary citing the serial number. Do not add details not present in the report.",
+    "target": "The agent must retrieve serial 00002 ('Missile Launch from Zendia Targeting Behrainabad') and write a short summary that includes: (1) the launch date of 15 June 2023 and approximate time of 12:30 local time; (2) the missile type identified as a medium-range ballistic missile; (3) the target described as a strategic location within the Behrainabad Federations; (4) confirmation via satellite imagery and cyber intelligence intercepts. The summary must cite (serial: 00002). Fabricating specific impact coordinates, casualty figures, or weapon designations not stated in the document is a failure. Failing to retrieve serial 00002 is a full failure.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "deepagent",
+      "expected_serials": ["00002"],
+      "eval_type": "single_document_retrieval_and_summary"
+    }
+  },
+  {
+    "id": "deep_easy_02",
+    "role": "deepagent",
+    "input": "Retrieve the intelligence report about police force sentiment and loyalty towards Salazar's regime from the dataset at {DATASET_PATH}. Read only that document and produce a concise one-paragraph summary citing the serial number. Do not add details not present in the report.",
+    "target": "The agent must retrieve serial 00059 ('Police Forces' Sentiment Towards Salazar's Regime') and write a short summary that includes: (1) approximately 60% of the police force remaining loyal to Salazar due to fear and benefits; (2) roughly 30% showing signs of dissatisfaction due to oppressive policies and corruption; (3) approximately 10% neutral or undecided; (4) early indicators of shifting loyalty such as increased absenteeism and reluctance to suppress protests. The summary must cite (serial: 00059). Fabricating named officers, specific units, or statistics beyond the 60/30/10 breakdown is a failure. Failing to retrieve serial 00059 is a full failure.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "deepagent",
+      "expected_serials": ["00059"],
+      "eval_type": "single_document_retrieval_and_summary"
+    }
+  },
+  {
+    "id": "deep_easy_03",
+    "role": "deepagent",
+    "input": "Retrieve the intelligence report about the Battle of North Zendia from the dataset at {DATASET_PATH}. Read only that document and produce a concise one-paragraph summary citing the serial number. Do not add details not present in the report.",
+    "target": "The agent must retrieve serial 00000 ('Operation Koila: Battle of North Zendia') and write a short summary that includes: (1) Mamba Force Opal successfully establishing a beachhead in North Zendia after penetrating coastal defenses; (2) the enemy's use of guerrilla tactics in urban areas as a significant challenge; (3) the role of encrypted communications and satellite imagery in coordinating the operation; (4) the political implication of boosting Zendian resistance morale. The summary must cite (serial: 00000). Fabricating specific casualty figures, named commanders beyond those in the document, or battle dates not stated in the document is a failure. Failing to retrieve serial 00000 is a full failure.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "deepagent",
+      "expected_serials": ["00000"],
+      "eval_type": "single_document_retrieval_and_summary"
+    }
+  },
+  {
+    "id": "general_easy_01",
+    "role": "general",
+    "input": "You are a general-purpose execution assistant. Using only the intelligence report excerpt below, write a concise structured summary (approximately 150 words). Cite the serial number for every factual claim using the format (serial: XXXXX). Do not add statistics, names, or details not present in the excerpt.\n\nREPORT EXCERPT:\n- Serial 00059: 'Police Forces' Sentiment Towards Salazar's Regime' — Current sentiment within police forces is mixed. Approximately 60% remain loyal to Salazar, largely due to fear and benefits received. About 30% show signs of dissatisfaction due to Salazar's oppressive policies and corruption. The remaining 10% is neutral or undecided. Early indicators of shifting loyalty include increased absenteeism, reluctance to suppress protests, and covert support to anti-Salazar elements, particularly in urban areas. The situation remains fluid.\n\nTask: Write a structured summary organized under two headings: 'Current Loyalty Breakdown' and 'Indicators of Shifting Loyalty'. Every specific figure or observation must carry a (serial: 00059) citation.",
+    "target": "A structured summary of approximately 150 words with two sections. 'Current Loyalty Breakdown' must accurately state: ~60% loyal due to fear and benefits, ~30% dissatisfied due to oppressive policies and corruption, ~10% neutral/undecided — all citing (serial: 00059). 'Indicators of Shifting Loyalty' must list the three early indicators from the document: increased absenteeism, reluctance to suppress protests, covert support to anti-Salazar elements — all citing (serial: 00059). The summary must not fabricate named officers, specific cities, unit designations, or percentages beyond those stated. Omitting any of the three loyalty tiers or any of the three early indicators is a partial failure. Adding invented specifics is a faithfulness failure.",
+    "metadata": {
+      "dataset_path": "{DATASET_PATH}",
+      "role": "general",
+      "eval_type": "single_document_summary"
     }
   }
 ]

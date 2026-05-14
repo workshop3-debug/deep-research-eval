@@ -1,72 +1,54 @@
 """
 DeepAgent Evaluation with Inspect AI
 ======================================
-A generic deep-research agent evaluation harness. The agent works over any
-document corpus (a directory of files) configured via the DEEP_RESEARCH_DATASET
-environment variable. Evaluates the full DeepAgent pipeline as well as each
-subagent individually:
-  - research()   - read-only data gathering from the corpus
-  - plan()       - structured planning / analysis
-  - general()    - full-capability execution
+Evaluates the full DeepAgent pipeline as well as each subagent individually:
+  - plan()       - structured task decomposition and research planning
+  - research()   - read-only targeted information gathering from the SCADS2025 dataset
+  - general()    - full-capability report synthesis and citation
 
-The samples file (deepagent_samples.json) supplies the actual questions, so
-this file stays domain-agnostic — swap the corpus and the samples and the same
-solvers/scorers apply.
+Pipeline order: plan → research → general
 
 Samples are loaded from: deepagent_samples.json (same directory as this file)
-Each sample must have: id, role, input, target, metadata.
+Each sample must have: id, role, input, target, and a top-level 'role' key.
 
 Run examples
 ------------
 # Full suite (all four tasks):
-    inspect eval deep_agent_inspect.py --model openai/gpt-5-mini
+    inspect eval deepagent_eval.py --model anthropic/claude-sonnet-4-20250514
 
 # A single task:
-    inspect eval deep_agent_inspect.py@task_research_agent --model openai/gpt-5-mini
-    inspect eval deep_agent_inspect.py@task_plan_agent     --model openai/gpt-5-mini
-    inspect eval deep_agent_inspect.py@task_general_agent  --model openai/gpt-5-mini
-    inspect eval deep_agent_inspect.py@task_deepagent_full --model openai/gpt-5-mini
+    inspect eval deepagent_eval.py@task_research_agent --model anthropic/claude-sonnet-4-20250514
+    inspect eval deepagent_eval.py@task_plan_agent     --model anthropic/claude-sonnet-4-20250514
+    inspect eval deepagent_eval.py@task_general_agent  --model anthropic/claude-sonnet-4-20250514
+    inspect eval deepagent_eval.py@task_deepagent_full --model anthropic/claude-sonnet-4-20250514
 
 # View results afterwards:
     inspect view
 """
 
-from __future__ import annotations
-
 import json
-import os
-import re
 from pathlib import Path
 from textwrap import dedent
 from typing import Any
 
+# import litellm
+# litellm.modify_params = True
+
 from inspect_ai import Task, task
 from inspect_ai.agent import as_solver, deepagent, general, plan, research
 from inspect_ai.dataset import Sample
-from inspect_ai.model import (
-    ChatMessageSystem,
-    ChatMessageUser,
-    GenerateConfig,
-    get_model,
-)
 from inspect_ai.scorer import (
     Score,
     Scorer,
     Target,
-    mean,
+    accuracy,
+    model_graded_fact,
+    model_graded_qa,
     scorer,
-    stderr,
 )
 from inspect_ai.solver import TaskState
 from inspect_ai.tool import bash, grep, list_files, read_file, text_editor
-
-# ---------------------------------------------------------------------------
-# LLM proxy wiring — LAS proxy speaks the OpenAI protocol.
-# ---------------------------------------------------------------------------
-
-if os.getenv("OPENAI_KEY") and not os.getenv("OPENAI_API_KEY"):
-    os.environ["OPENAI_API_KEY"] = os.environ["OPENAI_KEY"]
-os.environ.setdefault("OPENAI_BASE_URL", "https://llm-west.ncsu-las.net/v1")
+from inspect_ai.util._limit import message_limit
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -74,29 +56,50 @@ os.environ.setdefault("OPENAI_BASE_URL", "https://llm-west.ncsu-las.net/v1")
 
 SAMPLES_FILE = Path(__file__).parent / "deepagent_samples.json"
 
-DATASET_PATH = os.getenv(
-    "DEEP_RESEARCH_DATASET",
-    "/home/workshop4/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
-)
+DATASET_PATH = "/home/workshop11/deep_agent_eval/1_5_3_GPT 4"
 
-JUDGE_MODEL = os.getenv("DEEP_RESEARCH_JUDGE_MODEL", "openai/gpt-5-mini")
+AGENT_MODEL = "openai/deepinfra/anthropic/claude-4-sonnet"
 
+JUDGE_MODEL = "openai/gpt-4o-mini"
+
+# How many model turns the research subagent may take per invocation.
+# Reading ~127 JSON files with relevance filtering can consume 150-250 messages;
+# 300 gives headroom for thorough document-by-document retrieval.
+RESEARCH_MESSAGE_LIMIT = 300
 
 # ---------------------------------------------------------------------------
 # Load samples from JSON
 # ---------------------------------------------------------------------------
 
 def load_samples(role: str) -> list[Sample]:
-    """Read deepagent_samples.json and return samples matching `role`."""
+    """
+    Read deepagent_samples.json and return samples matching `role`.
+    Each JSON object must have: id, input, target, and a top-level 'role' key.
+
+    Any occurrence of the literal string ``{DATASET_PATH}`` in the input,
+    target, or metadata values is replaced with the value of DATASET_PATH
+    defined above.  This allows the JSON file to be kept path-agnostic while
+    still resolving to the correct runtime path.
+    """
     with open(SAMPLES_FILE, "r", encoding="utf-8") as f:
         raw: list[dict[str, Any]] = json.load(f)
+
+    def _sub(value: Any) -> Any:
+        """Recursively substitute {DATASET_PATH} in strings and dicts."""
+        if isinstance(value, str):
+            return value.replace("{DATASET_PATH}", DATASET_PATH)
+        if isinstance(value, dict):
+            return {k: _sub(v) for k, v in value.items()}
+        if isinstance(value, list):
+            return [_sub(v) for v in value]
+        return value
 
     return [
         Sample(
             id=entry["id"],
-            input=entry["input"],
-            target=entry["target"],
-            metadata=entry.get("metadata", {}),
+            input=_sub(entry["input"]),
+            target=_sub(entry["target"]),
+            metadata=_sub(entry.get("metadata", {})),
         )
         for entry in raw
         if entry.get("role") == role
@@ -104,634 +107,397 @@ def load_samples(role: str) -> list[Sample]:
 
 
 # ---------------------------------------------------------------------------
-# LLM-judge helpers (shared rubric infrastructure)
+# Custom scorer: task-completion rubric via LLM judge
 # ---------------------------------------------------------------------------
 
-_JSON_BLOCK = re.compile(r"\{.*\}|\[.*\]", re.DOTALL)
+def task_completion_scorer(model: str = JUDGE_MODEL) -> Scorer:
+    """
+    LLM-as-judge: rates overall task completion on a 0 / 0.5 / 1.0 scale.
+      C (correct / complete)  -> 1.0
+      P (partial)             -> 0.5
+      I (incorrect / missing) -> 0.0
+    """
+    base = model_graded_qa(
+        model=model,
+        partial_credit=True,
+        instructions=dedent("""
+            You are an expert evaluator.
 
+            Rate the ASSISTANT RESPONSE against the CRITERION below.
 
-def _parse_json(text: str) -> Any:
-    text = text.strip()
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text, flags=re.MULTILINE)
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    m = _JSON_BLOCK.search(text)
-    if m:
-        try:
-            return json.loads(m.group(0))
-        except json.JSONDecodeError:
-            return None
-    return None
+            Scoring rubric:
+              C (correct / complete)   - fully satisfies the criterion
+              P (partial)              - partially satisfies, some gaps
+              I (incorrect/missing)    - does not satisfy the criterion
 
-
-JUDGE_TEMPLATE = """You are a strict evaluator. Score the assistant response on \
-a 1-5 scale and respond with valid JSON only:
-{{"score": <1-5 integer>, "rationale": "<1-3 sentences>"}}
-
-Criteria:
-{criteria}
-
-Original task:
-{task}
-
-Reference target (what a good response should cover):
-{target}
-
-Assistant response:
-{response}
-"""
-
-
-async def _judge(criteria: str, task_text: str, target_text: str, response: str) -> tuple[float, str]:
-    out = await get_model(JUDGE_MODEL).generate(
-        [
-            ChatMessageSystem(
-                content="You are a strict evaluator. Respond with valid JSON only."
-            ),
-            ChatMessageUser(
-                content=JUDGE_TEMPLATE.format(
-                    criteria=criteria,
-                    task=task_text,
-                    target=target_text,
-                    response=response or "(empty response)",
-                )
-            ),
-        ],
-        config=GenerateConfig(temperature=0.0),
+            Think step by step, then end your response with exactly one of:
+            GRADE: C
+            GRADE: P
+            GRADE: I
+        """),
     )
-    data = _parse_json(out.completion) or {}
-    try:
-        raw = float(data.get("score", 0))
-    except (TypeError, ValueError):
-        raw = 0.0
-    score = max(0.0, min(5.0, raw)) / 5.0  # normalize to [0, 1]
-    return score, str(data.get("rationale", "judge returned no rationale"))
+
+    @scorer(metrics=[accuracy()])
+    def task_completion() -> Scorer:
+        async def score(state: TaskState, target: Target) -> Score:
+            return await base(state, target)
+        return score
+
+    return task_completion()
 
 
-# Per-role rubrics — analogous to the phase scorers in deep_research_inspect.py.
-RESEARCH_CRITERIA = """- Faithfulness: every claim is supported by evidence drawn from the source documents.
-- Relevance: the answer addresses what was actually asked.
-- Coverage: uses multiple relevant sources rather than a single hit.
-- Citations: cites specific files / identifiers so claims are traceable.
-- Honest gaps: explicitly says when the sources are silent on something.
-- Discipline: stays read-only and does not fabricate file contents."""
-
-PLAN_CRITERIA = """- Structure: clearly organized phases or numbered steps.
-- Specificity: steps are actionable, not vague aspirations.
-- Coverage: addresses every dimension the prompt asks for (deliverables, dependencies, risks, etc.).
-- Atomicity: sub-questions or steps are focused enough to execute independently.
-- Success criteria: defines how each step is judged 'done'.
-- No execution: produces a plan only, without running code or writing files."""
-
-GENERAL_CRITERIA = """- Correctness: computed values and extracted facts match what the source documents actually contain.
-- Completeness: every sub-task in the prompt is attempted.
-- Faithfulness: claims are grounded in observed files, not invented.
-- Format compliance: output matches the requested format (markdown table, word limits, ordering).
-- Citations: when asked, references specific files / identifiers.
-- Synthesis: where the prompt asks for interpretation, the synthesis is supported by the extracted data."""
-
-DEEPAGENT_CRITERIA = """- Pipeline: the response shows evidence of research -> plan -> execution stages.
-- Faithfulness: claims trace back to specific source documents.
-- Structure: final output is a coherent markdown report with executive summary, thematic sections, and sources.
-- Coverage: integrates findings across multiple sub-questions / sources.
-- Citations: file identifiers or paths are cited inline or in a sources list.
-- Analysis quality: where hypotheses are required, each is rated against evidence."""
-
-
-def _rubric_scorer(criteria: str, label: str) -> Scorer:
-    async def score(state: TaskState, target: Target) -> Score:
-        response = state.output.completion or ""
-        task_text = state.input_text
-        target_text = target.text if hasattr(target, "text") else str(target)
-        s, rationale = await _judge(criteria, task_text, target_text, response)
-        return Score(value=s, explanation=rationale, metadata={"rubric": label})
-
-    return score
-
-
-@scorer(metrics=[mean(), stderr()])
-def score_research_rubric() -> Scorer:
-    return _rubric_scorer(RESEARCH_CRITERIA, "research")
-
-
-@scorer(metrics=[mean(), stderr()])
-def score_plan_rubric() -> Scorer:
-    return _rubric_scorer(PLAN_CRITERIA, "plan")
-
-
-PLAN_RELEVANCE_CRITERIA = """For each item in REQUIRED TOPICS, decide whether \
-the RESPONSE addresses it: yes (1.0), partial (0.5), or no (0.0). For each \
-item in FORBIDDEN TOPICS, decide whether the RESPONSE drifts into it (yes / no).
-
-Compute: coverage = (sum of required scores) / (number of required topics).
-Apply a penalty of 0.2 per forbidden topic the response drifts into.
-final_fraction = max(0.0, min(1.0, coverage - penalty))
-
-Then map final_fraction onto a 1-5 integer score:
-  1 = 0.0-0.19, 2 = 0.2-0.39, 3 = 0.4-0.59, 4 = 0.6-0.79, 5 = 0.8-1.0
-Return the integer score and a 1-3 sentence rationale that names which required
-topics were missed and which forbidden topics (if any) were touched."""
-
-
-@scorer(metrics=[mean(), stderr()])
-def score_plan_relevance() -> Scorer:
-    """Sample-specific topic-coverage scorer.
-
-    Reads expected_topics (required) and forbidden_topics (optional decoys)
-    from the sample's metadata and asks the judge to grade the plan's coverage.
-    Samples without expected_topics are skipped (value=0.0, noted in rationale).
+def retrieval_accuracy_scorer(model: str = JUDGE_MODEL) -> Scorer:
     """
-    async def score(state: TaskState, target: Target) -> Score:
-        meta = state.metadata or {}
-        required = meta.get("expected_topics") or []
-        forbidden = meta.get("forbidden_topics") or []
-        if not required:
-            return Score(
-                value=0.0,
-                explanation="sample has no expected_topics; relevance not graded",
-                metadata={"skipped": True},
-            )
+    LLM-as-judge for retrieval completeness.
 
-        response = state.output.completion or ""
-        required_block = "REQUIRED TOPICS:\n" + "\n".join(f"- {t}" for t in required)
-        forbidden_block = (
-            "\n\nFORBIDDEN TOPICS:\n" + "\n".join(f"- {t}" for t in forbidden)
-            if forbidden else ""
-        )
-        material = (
-            f"{required_block}{forbidden_block}\n\n"
-            f"PLAN:\n{response or '(empty)'}"
-        )
-        target_text = target.text if hasattr(target, "text") else str(target)
-        s, rationale = await _judge(
-            PLAN_RELEVANCE_CRITERIA, state.input_text, target_text, material
-        )
-        return Score(
-            value=s,
-            explanation=rationale,
-            metadata={"required": required, "forbidden": forbidden},
-        )
+    The CRITERION (target) lists the expected document serial numbers that the
+    research agent must retrieve.  The scorer checks how many of those appear
+    in the agent's response — citation by serial number is the signal.
 
-    return score
-
-
-@scorer(metrics=[mean(), stderr()])
-def score_general_rubric() -> Scorer:
-    return _rubric_scorer(GENERAL_CRITERIA, "general")
-
-
-@scorer(metrics=[mean(), stderr()])
-def score_deepagent_rubric() -> Scorer:
-    return _rubric_scorer(DEEPAGENT_CRITERIA, "deepagent")
-
-
-# Alias: the relevance scorer is generic and works on any response, not just
-# plans. Use this name when wiring it into research tasks.
-score_topic_relevance = score_plan_relevance
-
-
-@scorer(metrics=[mean(), stderr()])
-def score_required_citations() -> Scorer:
-    """Reference-preservation check.
-
-    Reads sample metadata.required_citations (list of serial strings or file
-    basenames) and verifies each appears at least once in the response.
-    Score = matches / required. Samples without required_citations are skipped.
+      C -> all or nearly all expected serials are cited and have key findings
+      P -> majority of expected serials cited, but some are missing
+      I -> fewer than half cited, or critical documents absent
     """
-    async def score(state: TaskState, target: Target) -> Score:
-        meta = state.metadata or {}
-        required = [str(c) for c in (meta.get("required_citations") or [])]
-        if not required:
-            return Score(
-                value=0.0,
-                explanation="sample has no required_citations; not graded",
-                metadata={"skipped": True},
-            )
-        response = (state.output.completion or "").lower()
-        hits, misses = [], []
-        for cite in required:
-            (hits if cite.lower() in response else misses).append(cite)
-        value = len(hits) / len(required)
-        return Score(
-            value=value,
-            explanation=(
-                f"{len(hits)}/{len(required)} required citations present"
-                + (f"; missing: {', '.join(misses)}" if misses else "")
-            ),
-            metadata={"hits": hits, "missing": misses},
-        )
+    base = model_graded_qa(
+        model=model,
+        partial_credit=True,
+        instructions=dedent("""
+            You are evaluating whether a research agent correctly retrieved
+            all expected intelligence documents from a dataset.
 
-    return score
+            The CRITERION lists the expected document serial numbers (e.g.
+            00006, 00041, 00042 …) that must appear in the response.
 
+            The ASSISTANT RESPONSE contains the agent's retrieved documents.
 
-# ---------------------------------------------------------------------------
-# Research-summary faithfulness scorers
-# ---------------------------------------------------------------------------
+            Evaluation steps:
+              1. Extract every serial number cited in the ASSISTANT RESPONSE.
+              2. Compare against the expected serials in the CRITERION.
+              3. Note which expected serials are present and which are absent.
 
-_FETCHED_TOOLS = {"read_file", "grep"}
+            Scoring:
+              C - All or nearly all (≥90%) expected serials are cited with at
+                  least one key finding each.
+              P - More than half of expected serials are cited, but notable
+                  gaps remain.
+              I - Fewer than half of expected serials are cited, or the most
+                  critical documents are missing.
 
+            Think step by step, then end with exactly one of:
+            GRADE: C
+            GRADE: P
+            GRADE: I
+        """),
+    )
 
-def _collected_evidence(state: TaskState, max_chars: int = 60_000) -> str:
-    """Concatenate everything the agent fetched via read_file / grep tool calls."""
-    chunks: list[str] = []
-    for msg in state.messages:
-        if getattr(msg, "role", None) != "tool":
-            continue
-        if getattr(msg, "function", None) not in _FETCHED_TOOLS:
-            continue
-        text = msg.text or ""
-        if not text.strip():
-            continue
-        chunks.append(f"--- tool={msg.function} ---\n{text}")
-    blob = "\n\n".join(chunks)
-    if len(blob) > max_chars:
-        blob = blob[:max_chars] + "\n…[evidence truncated]"
-    return blob
+    @scorer(metrics=[accuracy()])
+    def retrieval_accuracy() -> Scorer:
+        async def score(state: TaskState, target: Target) -> Score:
+            return await base(state, target)
+        return score
+
+    return retrieval_accuracy()
 
 
-FAITHFULNESS_CRITERIA = """Evaluate whether the SUMMARY is grounded in the \
-EVIDENCE (the actual tool results the agent fetched from the corpus).
-- Faithfulness: every claim in the summary appears in or is a reasonable paraphrase of the evidence.
-- No fabrication: no facts, names, dates, or numbers are introduced that are absent from the evidence.
-- Coverage: the summary actually uses what was fetched rather than ignoring it.
-- Honest gaps: where the evidence is silent, the summary says so explicitly.
-- Calibration: confident claims are well-supported; speculative claims are flagged."""
-
-
-@scorer(metrics=[mean(), stderr()])
-def score_research_faithfulness() -> Scorer:
-    """Approach A: tool-trace faithfulness.
-
-    Collects everything the agent read via read_file / grep and judges the
-    summary against that concatenated evidence. Catches hallucinated content
-    even when no citation is given.
+def faithfulness_scorer(model: str = JUDGE_MODEL) -> Scorer:
     """
-    async def score(state: TaskState, target: Target) -> Score:
-        evidence = _collected_evidence(state)
-        if not evidence:
-            return Score(
-                value=0.0,
-                explanation="agent fetched no documents via read_file/grep",
-                metadata={"evidence_chars": 0},
-            )
-        response = state.output.completion or ""
-        material = (
-            f"EVIDENCE (tool results, may be truncated):\n{evidence}\n\n"
-            f"SUMMARY:\n{response or '(empty)'}"
-        )
-        target_text = target.text if hasattr(target, "text") else str(target)
-        s, rationale = await _judge(
-            FAITHFULNESS_CRITERIA, state.input_text, target_text, material
-        )
-        return Score(
-            value=s,
-            explanation=rationale,
-            metadata={"evidence_chars": len(evidence)},
-        )
+    LLM-as-judge for source faithfulness.
 
-    return score
+    Checks that the generated intelligence report does not contain fabricated
+    claims beyond what the retrieved source documents state.
 
-
-# Citation patterns: 5-digit serials (Zendia convention), file:// URIs, and
-# bare *.json paths. Adjust _CITE_RE if your corpus uses different identifiers.
-_CITE_RE = re.compile(
-    r"file://(?P<uri>[^\s\]\)\"'`]+)"
-    r"|(?P<json>[\w./-]+\.json)"
-    r"|(?:serial[:= ]+)?(?P<serial>\d{5})\b"
-)
-
-
-def _extract_citations(text: str) -> list[str]:
-    seen: list[str] = []
-    for m in _CITE_RE.finditer(text or ""):
-        token = m.group("uri") or m.group("json") or m.group("serial")
-        if token and token not in seen:
-            seen.append(token)
-    return seen
-
-
-def _resolve_citation(token: str, dataset_root: Path) -> Path | None:
-    """Map a citation token to an on-disk file under dataset_root."""
-    # file:// URI - strip the scheme.
-    if token.startswith("/"):
-        p = Path(token)
-        return p if p.is_file() else None
-    # Direct relative path under the dataset root.
-    direct = dataset_root / token
-    if direct.is_file():
-        return direct
-    # Serial form (e.g. "00152") -> search for matching filename.
-    if token.isdigit() and dataset_root.is_dir():
-        for match in dataset_root.rglob(f"{token}.json"):
-            return match
-    # Last resort: glob by basename.
-    if dataset_root.is_dir():
-        for match in dataset_root.rglob(Path(token).name):
-            return match
-    return None
-
-
-CITATION_CRITERIA = """You will see a CITED SOURCE (the file the summary cites) \
-and the SUMMARY itself. Decide whether the claims in the summary that are \
-attached to this citation are actually supported by the cited source.
-- Direct support: the cited text says what the summary claims.
-- Paraphrase: the cited text supports the claim in different words.
-- Unsupported: the claim is not present in the cited source.
-- Contradicted: the cited source says something different.
-Score on the 1-5 scale: 5 = fully supported, 3 = partially supported, 1 = unsupported or contradicted."""
-
-
-@scorer(metrics=[mean(), stderr()])
-def score_research_citations() -> Scorer:
-    """Approach B: per-citation verification.
-
-    Parses citations out of the summary, reads each cited file from disk, and
-    judges each citation independently. Final score = mean of per-citation
-    scores. Returns 0.0 with an explanation if no citations are found.
+      C -> all significant claims are attributed to a cited serial; no obvious
+           fabrication detected
+      P -> most claims sourced; a few unsourced specifics present
+      I -> multiple fabricated facts, invented names/figures, or material
+           claims with no serial citation
     """
-    dataset_root = Path(DATASET_PATH)
+    base = model_graded_qa(
+        model=model,
+        partial_credit=True,
+        instructions=dedent("""
+            You are evaluating whether an intelligence report is faithful to
+            its stated source documents.
 
-    async def score(state: TaskState, target: Target) -> Score:
-        response = state.output.completion or ""
-        citations = _extract_citations(response)
-        if not citations:
-            return Score(
-                value=0.0,
-                explanation="summary contains no resolvable citations",
-                metadata={"citations": []},
-            )
+            The CRITERION describes what faithful grounding means for this
+            specific task (which serials to cite, what must not be fabricated).
 
-        per_citation: list[dict[str, Any]] = []
-        scores: list[float] = []
-        target_text = target.text if hasattr(target, "text") else str(target)
+            The ASSISTANT RESPONSE is the generated intelligence report.
 
-        for token in citations:
-            path = _resolve_citation(token, dataset_root)
-            if path is None:
-                per_citation.append({"citation": token, "score": 0.0,
-                                     "note": "unresolved"})
-                scores.append(0.0)
-                continue
-            try:
-                cited_text = path.read_text(errors="replace")
-            except OSError as exc:
-                per_citation.append({"citation": token, "score": 0.0,
-                                     "note": f"read error: {exc}"})
-                scores.append(0.0)
-                continue
-            if len(cited_text) > 20_000:
-                cited_text = cited_text[:20_000] + "\n…[source truncated]"
-            material = (
-                f"CITATION TOKEN: {token}\n"
-                f"CITED SOURCE ({path.name}):\n{cited_text}\n\n"
-                f"SUMMARY:\n{response}"
-            )
-            s, rationale = await _judge(
-                CITATION_CRITERIA, state.input_text, target_text, material
-            )
-            per_citation.append({
-                "citation": token,
-                "path": str(path),
-                "score": s,
-                "rationale": rationale,
-            })
-            scores.append(s)
+            Evaluation steps:
+              1. Identify every specific factual claim (names, dates, figures,
+                 technical details, locations) in the ASSISTANT RESPONSE.
+              2. Check whether each claim is attributed to a cited serial
+                 number in the format (serial: XXXXX) or equivalent citation.
+              3. Flag any claim that introduces specific details not present
+                 in the stated sources — these are fabrication signals.
+              4. For hallucination-trap tasks (fictional entity / fictional
+                 person / leading premise): check that the agent correctly
+                 declined to confirm or fabricate the requested fiction.
 
-        mean_score = sum(scores) / len(scores) if scores else 0.0
-        unresolved = sum(1 for c in per_citation if c.get("note") == "unresolved")
-        explanation = (
-            f"{len(scores)} citations checked; "
-            f"{unresolved} unresolved; mean={mean_score:.2f}"
-        )
-        return Score(
-            value=mean_score,
-            explanation=explanation,
-            metadata={"citations": per_citation},
-        )
+            Scoring:
+              C - All significant claims have serial citations; no apparent
+                  fabrication beyond what the sources state; hallucination
+                  traps correctly refused.
+              P - Most claims are sourced, but some unsourced specifics appear
+                  that cannot be verified from citations alone.
+              I - Multiple uncited specifics that appear invented; or the agent
+                  confirmed a hallucination trap by fabricating requested
+                  details.
 
-    return score
+            Think step by step, then end with exactly one of:
+            GRADE: C
+            GRADE: P
+            GRADE: I
+        """),
+    )
 
+    @scorer(metrics=[accuracy()])
+    def faithfulness() -> Scorer:
+        async def score(state: TaskState, target: Target) -> Score:
+            return await base(state, target)
+        return score
 
-@scorer(metrics=[])
-def executive_summary_scorer() -> Scorer:
-    """Generate an executive summary of the model output without scoring it.
-
-    Stores the generated summary in Score.explanation and Score.metadata["summary"].
-    Returns value=0.0 so aggregate metrics are not polluted.
-    """
-    SUMMARY_PROMPT = dedent("""\
-        Write a concise executive summary (3-5 sentences) of the following \
-        assistant response. Focus on what was accomplished, key findings, and \
-        any notable gaps. Do not score or evaluate — just summarize.
-
-        TASK:
-        {task}
-
-        RESPONSE:
-        {response}
-    """)
-
-    async def score(state: TaskState, target: Target) -> Score:
-        response = state.output.completion or ""
-        out = await get_model(JUDGE_MODEL).generate(
-            [
-                ChatMessageSystem(content="You are a concise technical writer."),
-                ChatMessageUser(
-                    content=SUMMARY_PROMPT.format(
-                        task=state.input_text,
-                        response=response or "(empty response)",
-                    )
-                ),
-            ],
-            config=GenerateConfig(temperature=0.0),
-        )
-        summary = (out.completion or "").strip()
-        return Score(value=0.0, explanation=summary, metadata={"summary": summary})
-
-    return score
-
-
-# Lightweight C/P/I task-completion scorer kept for backwards compatibility.
-CPI_INSTRUCTIONS = """Decide whether the assistant response satisfies the task \
-and its target description.
-Reply with exactly one letter:
-  C - fully satisfies the target
-  P - partially satisfies, with material gaps
-  I - does not satisfy the target"""
-
-
-@scorer(metrics=[mean(), stderr()])
-def task_completion_scorer() -> Scorer:
-    async def score(state: TaskState, target: Target) -> Score:
-        response = state.output.completion or ""
-        task_text = state.input_text
-        target_text = target.text if hasattr(target, "text") else str(target)
-        out = await get_model(JUDGE_MODEL).generate(
-            [
-                ChatMessageSystem(content="You are a strict evaluator."),
-                ChatMessageUser(
-                    content=dedent(
-                        f"""\
-                        {CPI_INSTRUCTIONS}
-
-                        Task:
-                        {task_text}
-
-                        Target:
-                        {target_text}
-
-                        Response:
-                        {response or '(empty response)'}
-
-                        Reply with exactly one letter: C, P, or I.
-                        """
-                    )
-                ),
-            ],
-            config=GenerateConfig(temperature=0.0),
-        )
-        letter = (out.completion or "").strip().upper()[:1]
-        value = {"C": 1.0, "P": 0.5, "I": 0.0}.get(letter, 0.0)
-        return Score(
-            value=value,
-            explanation=out.completion.strip(),
-            metadata={"raw_grade": letter},
-        )
-
-    return score
+    return faithfulness()
 
 
 # ---------------------------------------------------------------------------
 # Tool sets
+#
+# Access policy:
+#   plan      - NO filesystem tools; decomposes the question into research tasks.
+#   research  - ONLY subagent permitted to read the dataset directory.
+#   general   - Compute/write tools only (bash, text_editor); no dataset
+#               readers. Synthesises from the plan + research output.
 # ---------------------------------------------------------------------------
 
-READONLY_TOOLS = [read_file(), list_files(), grep()]
-READWRITE_TOOLS = [read_file(), list_files(), grep(), bash(), text_editor()]
+RESEARCH_TOOLS = [read_file(), list_files(), grep()]   # dataset access
+PLAN_TOOLS     = []                                     # context-only
+GENERAL_TOOLS  = [bash(), text_editor()]                # compute/write only
 
 
-# # ---------------------------------------------------------------------------
-# # Task 1 - Research subagent (standalone)
-# # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Task 2 - Research subagent (standalone) — pipeline step 2
+# ---------------------------------------------------------------------------
 
-# @task
-# def task_research_agent() -> Task:
-#     """Evaluate the research() subagent on corpus extraction tasks."""
-#     research_subagent = research(
-#         tools=READONLY_TOOLS,
-#         instructions=dedent(f"""\
-#             You have read-only access to a document corpus at:
-#             {DATASET_PATH}
+@task
+def task_research_agent() -> Task:
+    """Evaluate the research() subagent in isolation.
 
-#             Use list_files, read_file, and grep to gather information from the
-#             corpus. Cite specific file paths or identifiers when making claims.
-#             Never attempt to write or modify files.
-#         """),
-#     )
+    Tests retrieval accuracy: given a structured research plan (sub-questions
+    and retrieval directives from the plan subagent), does the research agent
+    find ALL relevant documents from the corpus of ~127 JSON reports?
+    """
+    research_subagent = research(
+        tools=RESEARCH_TOOLS,
+        limits=[message_limit(RESEARCH_MESSAGE_LIMIT)],
+        instructions=dedent(f"""\
+            You are a document retrieval specialist with read-only access to
+            a corpus of structured intelligence reports at:
+            {DATASET_PATH}
 
-#     agent = deepagent(
-#         subagents=[research_subagent],
-#         memory=False,
-#         instructions=(
-#             f"Delegate ALL work to the research subagent. Dataset: {DATASET_PATH}"
-#         ),
-#     )
+            The corpus contains approximately 127 JSON files. Each file is a
+            single intelligence report with these fields:
+              serial       - unique 5-digit identifier (e.g. "00006")
+              title        - report title
+              topic        - category (cyber, military, missiles, weapons,
+                             diplomacy, domestic, economy, space, tactics,
+                             leadership, counterintelligence)
+              author       - analyst who wrote the report
+              classification - SECRET SQUIRREL or CONFIDENTIAL CHIPMUNK
+              body         - full report text (most important for relevance)
+              question     - the intelligence question this report answers
+              tags         - keyword list
 
-#     return Task(
-#         dataset=load_samples("research"),
-#         solver=as_solver(agent),
-#         scorer=[
-#             task_completion_scorer(),
-#             score_research_rubric(),
-#             score_research_faithfulness(),
-#             score_research_citations(),
-#             score_topic_relevance(),
-#             score_required_citations(),
-#         ],
-#         metadata={"subagent": "research"},
-#         sandbox="local",
-#     )
+            You will receive a research plan containing numbered sub-questions
+            and retrieval directives. Execute each directive against the corpus.
+
+            RETRIEVAL STRATEGY — follow these steps for every plan sub-task:
+              1. Call list_files("{DATASET_PATH}") once to get the complete file list.
+              2. For EVERY JSON file in the listing, call read_file() to read it.
+              3. For each sub-question in the plan, assess relevance by checking
+                 'topic', 'title', 'question', and 'body' against that sub-question.
+              4. Compile ALL relevant documents across all sub-questions.
+              5. Do NOT stop reading early — check every file to ensure complete
+                 retrieval. The corpus is ~127 files; read them all.
+              6. Use grep() to follow up on specific names, events, or terms
+                 identified in a sub-question if needed.
+
+            For each relevant document found, report:
+              - serial number (exact 5-digit string)
+              - title
+              - topic and classification
+              - which plan sub-question(s) this document addresses
+              - 2–3 sentence excerpt from 'body' directly relevant to that sub-question
+              - author
+
+            Do NOT fabricate document contents, serial numbers, or findings
+            not present in the actual files.
+            Do NOT report a document as relevant unless its body content
+            actually addresses a sub-question in the plan.
+            Never attempt to write or modify any files.
+        """),
+    )
+
+    agent = deepagent(
+        subagents=[research_subagent],
+        memory=False,
+        instructions=dedent(f"""\
+            Delegate ALL retrieval work to the research subagent.
+            Dataset: {DATASET_PATH}
+
+            The input contains a research plan with specific sub-questions and
+            retrieval directives. The research subagent must execute every
+            directive and retrieve ALL documents relevant to each sub-question.
+
+            Do NOT answer from prior knowledge.
+            All findings must cite specific serial numbers from the actual files.
+        """),
+    )
+
+    return Task(
+        dataset=load_samples("research"),
+        solver=as_solver(agent),
+        scorer=[
+            retrieval_accuracy_scorer(),
+            task_completion_scorer(),
+        ],
+        model=AGENT_MODEL,
+        metadata={"subagent": "research"},
+        sandbox="local",
+    )
 
 
-# # ---------------------------------------------------------------------------
-# # Task 2 - Plan subagent (standalone)
-# # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Task 1 - Plan subagent (standalone) — pipeline step 1
+# ---------------------------------------------------------------------------
 
-# @task
-# def task_plan_agent() -> Task:
-#     """Evaluate the plan() subagent on research-planning tasks."""
-#     plan_subagent = plan(
-#         tools=READONLY_TOOLS,
-#         instructions=dedent(f"""\
-#             You are a research planning specialist.
-#             The corpus you may inspect (read-only) lives at:
-#             {DATASET_PATH}
+@task
+def task_plan_agent() -> Task:
+    """Evaluate the plan() subagent in isolation.
 
-#             Produce structured, actionable research plans. Break the task into
-#             focused sub-questions, list the search terms and document fields
-#             you would use, and state clear success criteria for each step. Do
-#             not execute code, modify files, or produce the final analysis.
-#         """),
-#     )
+    The plan subagent has NO filesystem access. It receives the raw
+    intelligence question and must decompose it into a structured set of
+    targeted research sub-tasks that the research subagent will execute.
+    Tests whether the planner produces a complete, actionable research plan.
+    """
+    plan_subagent = plan(
+        tools=PLAN_TOOLS,
+        instructions=dedent("""\
+            You are an intelligence task decomposition specialist.
 
-#     agent = deepagent(
-#         subagents=[plan_subagent],
-#         memory=False,
-#         instructions=(
-#             f"Delegate ALL planning work to the plan subagent. Dataset: {DATASET_PATH}"
-#         ),
-#     )
+            You have NO access to any filesystem or dataset directory.
+            Do NOT attempt to read, list, or search any files.
 
-#     return Task(
-#         dataset=load_samples("plan"),
-#         solver=as_solver(agent),
-#         scorer=[
-#             task_completion_scorer(),
-#             score_plan_rubric(),
-#             score_plan_relevance(),
-#         ],
-#         metadata={"subagent": "plan"},
-#         sandbox="local",
-#     )
+            Your task: given a raw intelligence question, decompose it into
+            a structured research plan — a numbered list of specific, targeted
+            sub-questions and retrieval directives that a document retrieval
+            agent will execute against a corpus of intelligence reports.
+
+            Each plan step must:
+              - State one specific, answerable sub-question or retrieval goal.
+              - Identify the topic domain or keywords to search for
+                (e.g. "cyber", "military", "missiles", person names, events).
+              - Be actionable: the retrieval agent must be able to execute it
+                by scanning document fields (topic, title, question, body).
+
+            Do NOT attempt to answer the question yourself.
+            Do NOT invent document contents or serial numbers.
+            Do NOT execute code or write any files.
+            Output numbered steps only — no prose preamble.
+        """),
+    )
+
+    agent = deepagent(
+        subagents=[plan_subagent],
+        memory=False,
+        instructions=dedent("""\
+            Delegate ALL task decomposition work to the plan subagent.
+            The plan subagent receives the raw intelligence question and
+            produces a structured research plan with specific sub-questions
+            and retrieval directives. It has no filesystem access.
+        """),
+    )
+
+    return Task(
+        dataset=load_samples("plan"),
+        solver=as_solver(agent),
+        scorer=[
+            task_completion_scorer(),
+            model_graded_fact(model=JUDGE_MODEL),
+        ],
+        model=AGENT_MODEL,
+        metadata={"subagent": "plan"},
+        sandbox="local",
+    )
 
 
-# # ---------------------------------------------------------------------------
-# # Task 3 - General subagent (standalone)
-# # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Task 3 - General subagent (standalone)
+# ---------------------------------------------------------------------------
 
-# @task
-# def task_general_agent() -> Task:
-#     """Evaluate the general() subagent on corpus-wide computations."""
-#     general_subagent = general(
-#         tools=READWRITE_TOOLS,
-#         instructions=dedent(f"""\
-#             You are a capable general-purpose analyst.
-#             Corpus directory: {DATASET_PATH}
+@task
+def task_general_agent() -> Task:
+    """Evaluate the general() subagent in isolation.
 
-#             You may read AND process files (bash, text_editor). Use Python
-#             via bash for aggregation and statistics. Cite specific file paths
-#             or identifiers when summarizing findings.
-#         """),
-#         memory="readwrite",
-#     )
+    The general subagent has NO dataset read access. Each input sample embeds
+    a research summary AND an analysis plan so the subagent has all context
+    it needs to write the final report. Tests faithfulness: every claim in the
+    output must be attributed to a cited serial from the provided context.
+    """
+    general_subagent = general(
+        tools=GENERAL_TOOLS,
+        instructions=dedent("""\
+            You are an intelligence report synthesis specialist.
 
-#     agent = deepagent(
-#         subagents=[general_subagent],
-#         memory=True,
-#         instructions=(
-#             f"Delegate ALL execution work to the general subagent. Dataset: {DATASET_PATH}"
-#         ),
-#     )
+            You have NO access to any dataset directory. Do NOT attempt
+            to read_file, list_files, grep, or open any dataset path.
+            Work strictly from the research summary and analysis plan
+            provided in the task input.
 
-#     return Task(
-#         dataset=load_samples("general"),
-#         solver=as_solver(agent),
-#         scorer=[task_completion_scorer(), score_general_rubric()],
-#         metadata={"subagent": "general"},
-#         sandbox="local",
-#     )
+            CRITICAL FAITHFULNESS RULES:
+              1. Cite the source serial number for EVERY specific factual
+                 claim using the format (serial: XXXXX).
+              2. Do NOT add specific names, dates, figures, unit designations,
+                 IP addresses, or technical details that are not present in
+                 the provided research summary.
+              3. If a claim cannot be attributed to a serial in the summary,
+                 do not include it.
+              4. Stay within the word limit stated in the task input.
+
+            You may use bash to draft or format text.
+            You may use text_editor to write the final report.
+            Return the final report as structured markdown with an explicit
+            Sources section listing every serial cited.
+        """),
+        memory="readwrite",
+    )
+
+    agent = deepagent(
+        subagents=[general_subagent],
+        memory=True,
+        instructions=dedent("""\
+            Delegate ALL synthesis work to the general subagent.
+            The general subagent must work only from the research context
+            and plan embedded in the task input — it has no filesystem access.
+
+            Enforce faithfulness: ensure the final report cites a serial
+            number for every specific factual claim and does not introduce
+            details beyond the provided research summary.
+        """),
+    )
+
+    return Task(
+        dataset=load_samples("general"),
+        solver=as_solver(agent),
+        scorer=[
+            faithfulness_scorer(),
+            task_completion_scorer(),
+        ],
+        model=AGENT_MODEL,
+        metadata={"subagent": "general"},
+        sandbox="local",
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -740,59 +506,147 @@ READWRITE_TOOLS = [read_file(), list_files(), grep(), bash(), text_editor()]
 
 @task
 def task_deepagent_full() -> Task:
-    """Evaluate the complete DeepAgent: research -> plan -> general."""
-    research_subagent = research(
-        tools=READONLY_TOOLS,
-        instructions=dedent(f"""\
-            Your role: read-only exploration of the document corpus.
-            Corpus path: {DATASET_PATH}
+    """
+    Evaluate the complete DeepAgent pipeline: plan -> research -> general.
 
-            Use list_files, read_file, and grep. Summarise findings clearly
-            for the planning stage, citing specific file paths or identifiers.
+    Three evaluation dimensions:
+      1. Retrieval accuracy  — did research find all relevant documents?
+      2. Faithfulness        — does the final report cite serials for every claim?
+      3. End-to-end quality  — does the report correctly answer the question
+                               (including correctly refusing hallucination traps)?
+    """
+    plan_subagent = plan(
+        tools=PLAN_TOOLS,
+        instructions=dedent("""\
+            You are an intelligence task decomposition specialist.
+
+            You have NO filesystem access. Do NOT attempt to read, list, or
+            search any files.
+
+            Given the raw intelligence question, decompose it into a structured
+            research plan — a numbered list of specific, targeted sub-questions
+            and retrieval directives for the research subagent to execute.
+
+            Each plan step must:
+              - State one specific, answerable sub-question or retrieval goal.
+              - Identify relevant topic domains or keywords to search for
+                (e.g. "cyber", "military", person names, unit names, events).
+              - Be actionable: the retrieval agent executes it by scanning
+                document fields (topic, title, question, body, tags).
+
+            Do NOT attempt to answer the intelligence question yourself.
+            Do NOT invent document contents or serial numbers.
+            Output numbered steps only — no prose preamble.
         """),
     )
 
-    plan_subagent = plan(
-        tools=READONLY_TOOLS,
+    research_subagent = research(
+        tools=RESEARCH_TOOLS,
+        limits=[message_limit(RESEARCH_MESSAGE_LIMIT)],
         instructions=dedent(f"""\
-            Your role: structured planning based on the research stage's findings.
-            Corpus path (reference only): {DATASET_PATH}
+            You are a document retrieval specialist with read-only access to
+            a corpus of ~127 JSON intelligence reports at:
+            {DATASET_PATH}
 
-            Output numbered steps with sub-questions to answer, fields to extract,
-            and success criteria for each.
+            Each JSON file is a structured intelligence report with fields:
+              serial        - unique 5-digit identifier (e.g. "00042")
+              title         - report title
+              topic         - category (cyber, military, missiles, weapons,
+                              diplomacy, domestic, economy, space, tactics,
+                              leadership, counterintelligence)
+              body          - full report text (most important for relevance)
+              question      - the intelligence question this report answers
+              classification, author, tags
+
+            You will receive a research plan with numbered sub-questions and
+            retrieval directives. Execute every directive against the corpus.
+
+            RETRIEVAL STRATEGY — mandatory for every plan sub-task:
+              1. Call list_files("{DATASET_PATH}") once to get the complete list.
+              2. Call read_file() on EVERY JSON file in the listing.
+              3. For each sub-question, assess relevance via 'topic', 'title',
+                 'question', and 'body' text.
+              4. Compile ALL relevant documents across all sub-questions.
+              5. Do not stop early — check every file.
+              6. Use grep() to follow up on specific names, events, or terms
+                 from a sub-question if needed.
+
+            Your output must be a fully-cited research summary listing:
+              - serial number, title, topic for each relevant document
+              - which plan sub-question(s) each document addresses
+              - A 2–3 sentence excerpt from 'body' directly relevant to that
+                sub-question (so general never needs dataset access)
+
+            CRITICAL: Do NOT fabricate serial numbers, titles, or body
+            content. Do NOT report documents as relevant unless their actual
+            body text addresses a sub-question in the plan.
         """),
     )
 
     general_subagent = general(
-        tools=READWRITE_TOOLS,
-        instructions=dedent(f"""\
-            Your role: execute the plan from the plan subagent and produce the
-            final report.
-            Corpus path: {DATASET_PATH}
+        tools=GENERAL_TOOLS,
+        instructions=dedent("""\
+            You are an intelligence report synthesis specialist.
 
-            Use bash for aggregations. Produce a markdown report with an
-            executive summary, thematic sections, and a Sources list citing
-            specific file paths or identifiers.
+            You have NO access to the dataset directory. Do NOT attempt to
+            read_file, list_files, grep, or open any dataset path.
+            Work only from the research summary and plan passed to you.
+
+            CRITICAL FAITHFULNESS RULES:
+              1. Every specific factual claim MUST include a serial citation
+                 in the format (serial: XXXXX).
+              2. Do NOT add names, dates, figures, unit designations, or
+                 technical details not present in the research summary.
+              3. If a claim cannot be attributed to a serial, omit it.
+              4. For questions about entities or events not found in the
+                 research summary, explicitly state they were not found
+                 rather than fabricating an answer.
+
+            Use text_editor to write the final markdown report.
+            End the report with an explicit "## Sources" section listing
+            every serial cited, its title, and a one-line description.
         """),
         memory="readwrite",
     )
 
     agent = deepagent(
-        subagents=[research_subagent, plan_subagent, general_subagent],
+        subagents=[plan_subagent, research_subagent, general_subagent],
         memory=True,
         todo_write=True,
-        max_depth=2,
+        max_depth=4,
         instructions=dedent(f"""\
-            You orchestrate three specialised subagents over a document corpus:
-              - research  : read-only data exploration
-              - plan      : structured planning
-              - general   : code execution and report writing
+            You orchestrate three specialised subagents with strict access
+            boundaries to produce a grounded intelligence assessment.
 
-            Corpus path: {DATASET_PATH}
+            Pipeline order: plan → research → general
 
-            Always follow the sequence: research -> plan -> general.
-            Consolidate outputs into a final markdown report with an executive
-            summary, thematic sections, and a Sources list of file references.
+              plan     : No filesystem access. Receives the raw intelligence
+                         question and decomposes it into a structured list of
+                         targeted research sub-questions and retrieval directives.
+
+              research : ONLY subagent that may read the dataset at
+                         {DATASET_PATH}
+                         Receives the plan's sub-questions and retrieves ALL
+                         relevant documents for each directive. Produces a
+                         fully-cited research summary.
+
+              general  : No filesystem access. Receives the plan and the
+                         research summary. Writes the final report. MUST cite
+                         serial numbers for every factual claim. MUST explicitly
+                         refuse to fabricate details for entities or events not
+                         found in the research summary.
+
+            Mandatory workflow:
+              1. Invoke plan with the user's raw intelligence question.
+                 Collect the numbered list of research sub-questions.
+              2. Pass the plan to research. Verify the output contains serial
+                 numbers and body excerpts covering every sub-question.
+              3. Pass both the plan and research output to general. Collect
+                 the final report.
+              4. Verify the final report has serial citations for all major
+                 claims. If any section lacks citations, return to general
+                 to add them.
+              5. Return the final report as the task output.
         """),
     )
 
@@ -800,14 +654,11 @@ def task_deepagent_full() -> Task:
         dataset=load_samples("deepagent"),
         solver=as_solver(agent),
         scorer=[
+            retrieval_accuracy_scorer(),
+            faithfulness_scorer(),
             task_completion_scorer(),
-            score_deepagent_rubric(),
-            score_research_faithfulness(),
-            score_research_citations(),
-            score_topic_relevance(),
-            score_required_citations(),
-            executive_summary_scorer(),
         ],
+        model=AGENT_MODEL,
         metadata={"subagent": "deepagent_full"},
         sandbox="local",
     )
@@ -817,5 +668,8 @@ def task_deepagent_full() -> Task:
 # To run ALL tasks in one sweep, just point inspect at this file with no
 # task name - it will auto-discover all @task functions:
 #
-#   inspect eval deep_agent_inspect.py --model openai/gpt-5-mini
+#   inspect eval deepagent_eval.py --model anthropic/claude-sonnet-4-20250514
+#
+# Note: returning list[Task] from a @task function is not supported by the
+# inspect registry, so we don't define a combined task here.
 # ---------------------------------------------------------------------------
