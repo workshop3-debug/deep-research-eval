@@ -76,7 +76,7 @@ SAMPLES_FILE = Path(__file__).parent / "deepagent_samples.json"
 
 DATASET_PATH = os.getenv(
     "DEEP_RESEARCH_DATASET",
-    "/home/workshop3/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
+    "/home/workshop4/efs/resources/datasets/SCADS2025/ZendiaDatasets/Clean Datasets",
 )
 
 JUDGE_MODEL = os.getenv("DEEP_RESEARCH_JUDGE_MODEL", "openai/gpt-5-mini")
@@ -515,6 +515,45 @@ def score_research_citations() -> Scorer:
     return score
 
 
+@scorer(metrics=[])
+def executive_summary_scorer() -> Scorer:
+    """Generate an executive summary of the model output without scoring it.
+
+    Stores the generated summary in Score.explanation and Score.metadata["summary"].
+    Returns value=0.0 so aggregate metrics are not polluted.
+    """
+    SUMMARY_PROMPT = dedent("""\
+        Write a concise executive summary (3-5 sentences) of the following \
+        assistant response. Focus on what was accomplished, key findings, and \
+        any notable gaps. Do not score or evaluate — just summarize.
+
+        TASK:
+        {task}
+
+        RESPONSE:
+        {response}
+    """)
+
+    async def score(state: TaskState, target: Target) -> Score:
+        response = state.output.completion or ""
+        out = await get_model(JUDGE_MODEL).generate(
+            [
+                ChatMessageSystem(content="You are a concise technical writer."),
+                ChatMessageUser(
+                    content=SUMMARY_PROMPT.format(
+                        task=state.input_text,
+                        response=response or "(empty response)",
+                    )
+                ),
+            ],
+            config=GenerateConfig(temperature=0.0),
+        )
+        summary = (out.completion or "").strip()
+        return Score(value=0.0, explanation=summary, metadata={"summary": summary})
+
+    return score
+
+
 # Lightweight C/P/I task-completion scorer kept for backwards compatibility.
 CPI_INSTRUCTIONS = """Decide whether the assistant response satisfies the task \
 and its target description.
@@ -767,6 +806,7 @@ def task_deepagent_full() -> Task:
             score_research_citations(),
             score_topic_relevance(),
             score_required_citations(),
+            executive_summary_scorer(),
         ],
         metadata={"subagent": "deepagent_full"},
         sandbox="local",
