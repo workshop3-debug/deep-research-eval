@@ -11,9 +11,6 @@ This README documents the two files in this directory that drive the harness:
 - `deep_agent_inspect.py` — solvers, scorers, and `@task` definitions
 - `deepagent_samples.json` — the evaluation dataset (questions + grading metadata)
 
-For the LangGraph reference implementation see `deep_research.py`; for the
-single-pipeline Inspect variant see `deep_research_inspect.py`.
-
 ---
 
 ## Quickstart
