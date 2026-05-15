@@ -6,6 +6,15 @@ Evaluates the full DeepAgent pipeline as well as each subagent individually:
   - research()   - read-only targeted information gathering from the SCADS2025 dataset
   - general()    - full-capability report synthesis and citation
 
+Scorers
+-------
+  - task_completion_scorer    - LLM judge: C/P/I → 1.0/0.5/0.0 overall task completion
+  - retrieval_accuracy_scorer - LLM judge: did research find all expected documents?
+  - faithfulness_scorer       - LLM judge: are all claims attributed to cited serials?
+  - executive_summary_scorer  - Non-scoring: generates a 3-5 sentence executive summary
+                                of the agent output; stored in Score.explanation for
+                                review in the Inspect UI. Always returns value=1.0.
+
 Pipeline order: plan → research → general
 
 Samples are loaded from: deepagent_samples.json (same directory as this file)
@@ -46,6 +55,7 @@ from inspect_ai.scorer import (
     model_graded_qa,
     scorer,
 )
+from inspect_ai.model import ChatMessageUser, get_model
 from inspect_ai.solver import TaskState
 from inspect_ai.tool import bash, grep, list_files, read_file, text_editor
 from inspect_ai.util._limit import message_limit
@@ -259,6 +269,39 @@ def faithfulness_scorer(model: str = JUDGE_MODEL) -> Scorer:
         return score
 
     return faithfulness()
+
+
+def executive_summary_scorer(model: str = JUDGE_MODEL) -> Scorer:
+    """
+    Generates a concise executive summary of the deep agent's output.
+    Does not produce a meaningful score (always returns 1.0); the summary
+    is stored in Score.explanation for review in the Inspect UI.
+    """
+    judge = get_model(model)
+
+    @scorer(metrics=[accuracy()])
+    def executive_summary() -> Scorer:
+        async def score(state: TaskState, target: Target) -> Score:
+            output = state.output.completion or ""
+            prompt = dedent(f"""\
+                You are an intelligence analyst reviewing an AI-generated report.
+
+                Write a 3–5 sentence executive summary of the ASSISTANT RESPONSE
+                below. Capture: the main intelligence question addressed, the key
+                findings or conclusions, and any significant caveats or gaps noted.
+
+                ASSISTANT RESPONSE:
+                {output}
+
+                Executive summary:
+            """)
+            result = await judge.generate([ChatMessageUser(content=prompt)])
+            summary = result.completion.strip()
+            return Score(value=1.0, explanation=summary)
+
+        return score
+
+    return executive_summary()
 
 
 # ---------------------------------------------------------------------------
@@ -657,6 +700,7 @@ def task_deepagent_full() -> Task:
             retrieval_accuracy_scorer(),
             faithfulness_scorer(),
             task_completion_scorer(),
+            executive_summary_scorer(),
         ],
         model=AGENT_MODEL,
         metadata={"subagent": "deepagent_full"},

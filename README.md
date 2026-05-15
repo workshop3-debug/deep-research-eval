@@ -62,7 +62,7 @@ Four `@task` functions, each evaluating a different slice of the pipeline:
 | `task_research_agent` | `research` only (read-only tools) | `research` | task_completion, research_rubric, research_faithfulness, research_citations, topic_relevance, required_citations |
 | `task_plan_agent` | `plan` only (read-only tools) | `plan` | task_completion, plan_rubric, plan_relevance |
 | `task_general_agent` | `general` only (read/write tools) | `general` | task_completion, general_rubric |
-| `task_deepagent_full` | `research` → `plan` → `general` orchestrated by `deepagent()` | `deepagent` | task_completion, deepagent_rubric, research_faithfulness, research_citations, topic_relevance, required_citations |
+| `task_deepagent_full` | `research` → `plan` → `general` orchestrated by `deepagent()` | `deepagent` | task_completion, deepagent_rubric, research_faithfulness, research_citations, topic_relevance, required_citations, executive_summary |
 
 Each task runs in the `"local"` sandbox and uses `as_solver(deepagent(...))` so
 all standard Inspect tooling (transcripts, `inspect view`, log replay) applies.
@@ -86,6 +86,9 @@ inspect reports both a mean and standard error across the dataset.
 | Scorer | Kind | What it measures |
 | --- | --- | --- |
 | `task_completion_scorer` | LLM judge (C/P/I → 1.0/0.5/0.0) | Coarse "did the response satisfy the target." Backwards-compatible signal. |
+| `retrieval_accuracy_scorer` | LLM judge (C/P/I → 1.0/0.5/0.0) | Did the research agent cite all expected serial numbers with key findings? |
+| `faithfulness_scorer` | LLM judge (C/P/I → 1.0/0.5/0.0) | Are all specific factual claims attributed to a cited serial? Flags fabrication and hallucination-trap failures. |
+| `executive_summary_scorer` | Non-scoring (always 1.0) | Calls the judge model to write a 3–5 sentence executive summary of the agent's output (question addressed, key findings, caveats). Stored in `Score.explanation`; visible in `inspect view`. Does not affect numeric metrics. |
 | `score_research_rubric` | LLM judge (1–5, normalized) | Research role: faithfulness, citations, coverage, honest gaps, read-only discipline. |
 | `score_plan_rubric` | LLM judge (1–5) | Plan role: structure, specificity, atomicity, success criteria, no-execution. |
 | `score_general_rubric` | LLM judge (1–5) | General role: correctness, format compliance, faithfulness, citations. |
@@ -202,7 +205,7 @@ non-JSON judges score the response 0.
 ## Scoring summary at a glance
 
 For a research-task sample with all metadata set, a single run produces six
-independent signals:
+independent signals plus a human-readable summary:
 
 1. **task_completion** — coarse pass / partial / fail
 2. **research_rubric** — judge's overall quality grade
@@ -210,8 +213,12 @@ independent signals:
 4. **research_citations** — per-citation verification against on-disk files
 5. **topic_relevance** — coverage of `expected_topics`, penalized by `forbidden_topics`
 6. **required_citations** — deterministic presence check for `required_citations`
+7. **executive_summary** _(deepagent_full only)_ — non-scoring; a 3–5 sentence
+   plain-language summary of what the agent found and concluded, stored in
+   `Score.explanation` and shown in `inspect view` for quick human review.
 
 A summary that's coherent, well-cited, on-topic, and grounded in what the
 agent actually read scores high on all six. A summary that's confidently wrong
 but well-cited scores high on (4) and (6) and low on (3) — exactly the kind of
-failure citation-only checks miss.
+failure citation-only checks miss. The executive summary (7) gives reviewers a
+fast orientation before diving into the full transcript.
